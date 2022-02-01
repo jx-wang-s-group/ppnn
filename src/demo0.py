@@ -5,14 +5,7 @@ from torch.nn.functional import pad
 from torch.utils.tensorboard import SummaryWriter
 from operators import diffusion1D, convection1d
 
-mu = 0.1
-device = torch.device('cuda:0')
-ratio = 20*2e-5/1e-4
-dx = 4/100
-dx2 = dx**2
-dt = 200*1e-4
-diffusr = diffusion1D(accuracy=2,device=device)
-convector = convection1d(accuracy=1,device=device)
+
 
 
 class lblock(nn.Module):
@@ -29,26 +22,21 @@ class lblock(nn.Module):
         return self.ln(self.net(x)) + x
 
 class mymlp(nn.Module):
-    def __init__(self, size):
+    def __init__(self, size,input_size = 101, output_size = 99, hidden_layers = 2):
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(102, size),
-            lblock(size),
-            lblock(size),
-            nn.Linear(size, 100),
-        )
+        self.net = [nn.Linear(input_size, size),]
+        for _ in range(hidden_layers):
+            self.net.append(lblock(size))
+        self.net.append(nn.Linear(size, output_size),)
+        self.net = nn.Sequential(*self.net)
 
     def forward(self, u):
         # return pad(self.net(u),(1,1),'constant',0)  
         # return pad(diffusr(u)*ratio+self.net(u),(1,1),'constant',0)
         # return pad(mu*diffur(u)/dx2-u[:,:,1:-1]*convec(u)/dx)*dt+u[:,:,1:-1],(1,1),'constant',0)
-        return (mu*diffusr(u)/dx2 - 0.5*convector(u*u)/dx)*dt + self.net(u)
-        # return self.net(u)
+        # return (mu*diffusr(u)/dx2 - 0.5*convector(u*u)/dx)*dt + self.net(u)
+        return self.net(u)
 
-
-class xCNN(nn.Module):
-    def __init__(self):
-        super().__init__()
 
 
 if __name__ == '__main__':
@@ -56,6 +44,14 @@ if __name__ == '__main__':
     import numpy as np
     np.random.seed(10)
     torch.manual_seed(10)
+    mu = 0.1
+    device = torch.device('cuda:0')
+    ratio = 20*2e-5/1e-4
+    dx = 4/100
+    dx2 = dx**2
+    dt = 200*1e-4
+    diffusr = diffusion1D(accuracy=2,device=device)
+    convector = convection1d(accuracy=1,device=device)
     EPOCH = int(4e3)+1
     BATCH_SIZE = int(10)
     writer = SummaryWriter('/home/lxy/store/projects/dynamic/PDE_structure/burgers/less-PDE-seed10')
