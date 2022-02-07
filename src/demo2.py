@@ -94,10 +94,10 @@ if __name__=='__main__':
         vy = padbcy(v1)
         return torch.cat((
             mcvter.up(
-                padBC_rd(-u1*dudx(ux)/dx - v1*dudy(uy)/dy + mu*(d2udx2(ux)/dx2+d2udy2(uy)/dy2))
+                padBC_rd(dt*(-u1*dudx(ux)/dx - v1*dudy(uy)/dy + mu*(d2udx2(ux)/dx2+d2udy2(uy)/dy2)))
             ),
             mcvter.up(
-                padBC_rd(-u1*dudx(vx)/dx - v1*dudy(vy)/dy + mu*(d2udx2(vx)/dx2+d2udy2(vy)/dy2))
+                padBC_rd(dt*(-u1*dudx(vx)/dx - v1*dudy(vy)/dy + mu*(d2udx2(vx)/dx2+d2udy2(vy)/dy2)))
             )),dim=1)
 
     EPOCH = int(1e5)+1
