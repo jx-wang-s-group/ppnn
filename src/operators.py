@@ -10,7 +10,6 @@ def attach1d1():
 def attach1dp():
     pass
 
-
 class operator_base1D(object):
     '''
         # The base class of 1D finite difference operator
@@ -254,7 +253,7 @@ class d2udy2_2D(operator_base2D):
         return conv2d(u, self.filter)
 
 class dudx_2D(operator_base2D):
-    def __init__(self, scheme='Upwind', accuracy = 2, device='cpu') -> None:
+    def __init__(self, scheme='Upwind', accuracy = 1, device='cpu') -> None:
         super().__init__(accuracy, device)
         self.xscheme = scheme
         self.filter = self.xschemes[scheme][accuracy]
@@ -267,7 +266,7 @@ class dudx_2D(operator_base2D):
             return conv2d(u, self.filter)
 
 class dudy_2D(operator_base2D):
-    def __init__(self, scheme='Upwind', accuracy = 2, device='cpu') -> None:
+    def __init__(self, scheme='Upwind', accuracy = 1, device='cpu') -> None:
         super().__init__(accuracy, device)
         self.yscheme = scheme
         self.filter = self.yschemes[scheme][accuracy]
@@ -406,7 +405,8 @@ if __name__=='__main__':
 
     ############################ 2D Burgers ###########################
     from matplotlib import cm
-    mu = 0.04
+    device = torch.device('cuda:0')
+    mu = torch.linspace(0.02,0.24,12,device=device).reshape(-1,1,1,1)
     def padbcx(uinner):
         return torch.cat((uinner[:,:,-4:-1],uinner,uinner[:,:,1:4]),dim=2)
 
@@ -414,20 +414,20 @@ if __name__=='__main__':
         return torch.cat((uinner[:,:,:,-4:-1],uinner,uinner[:,:,:,1:4]),dim=3)
         
 
-    x = torch.linspace(0,4,161)
-    y = torch.linspace(0,4,161)
+    x = torch.linspace(0,4,321,device=device)
+    y = torch.linspace(0,4,321,device=device)
     x,y = torch.meshgrid(x,y)
-    x = x.unsqueeze(0).unsqueeze(0)
-    y = y.unsqueeze(0).unsqueeze(0)
+    x = x.unsqueeze(0).unsqueeze(0).repeat([12,1,1,1])
+    y = y.unsqueeze(0).unsqueeze(0).repeat([12,1,1,1])
     dt = 1e-4
-    dx = 0.025
-    dy = 0.025
+    dx = 0.0125
+    dy = 0.0125
     dx2 = dx**2
     dy2 = dy**2
 
     t=0
-    initu = torch.sin(pi*x)+1.2
-    initv = 0.2*torch.sin(pi*y) + 1.2
+    initu = torch.sin(pi*x + y*pi) + 1.2
+    initv = torch.sin(pi*y - x*pi) + 1.2
     u = initu
     v = initv
     
@@ -436,25 +436,23 @@ if __name__=='__main__':
     resultu.append(u.detach())
     resultv.append(v.detach())
 
-    dudx = dudx_2D('Upwind',accuracy=3)
-    dudy = dudy_2D('Upwind',accuracy=3)
+    dudx = dudx_2D('Upwind',accuracy=3,device=device)
+    dudy = dudy_2D('Upwind',accuracy=3,device=device)
     # dudxc = dudx_2D('Central',accuracy=6)
     # dudyc = dudy_2D('Central',accuracy=6)
-    d2udx2 = d2udx2_2D('Central',accuracy=6)
-    d2udy2 = d2udy2_2D('Central',accuracy=6)
+    d2udx2 = d2udx2_2D('Central',accuracy=6,device=device)
+    d2udy2 = d2udy2_2D('Central',accuracy=6,device=device)
 
-    from torch.utils.tensorboard import SummaryWriter
-    writer = SummaryWriter()
+    # from torch.utils.tensorboard import SummaryWriter
+    # writer = SummaryWriter('/home/lxy/store/projects/dynamic/PDE_structure/2D/burgers/solver/0.02')
     
-    def addplot(u,v):
-        fig,ax = plt.subplots(subplot_kw={"projection": "3d"})
-        ax.plot_surface(x.squeeze(),y.squeeze(),torch.sqrt(u.squeeze() + v.squeeze())**2,cmap=cm.coolwarm)
-        ax.set_zlim(1,4)
-        # ax1=ax[1].pcolormesh(initu[0,0])
-        # surf1.set_facecolor((0.1,0.1,0.9,0.5))
-        return fig
+    # def addplot(u,v):
+    #     fig,ax = plt.subplots(subplot_kw={"projection": "3d"})
+    #     ax.plot_surface(x.squeeze(),y.squeeze(),torch.sqrt(u.squeeze() + v.squeeze())**2,cmap=cm.coolwarm)
+    #     ax.set_zlim(1,4)
+    #     return fig
 
-    for i in range(150000):
+    for i in range(20001):
         
         ux = padbcx(u)
         uy = padbcy(u)
@@ -464,15 +462,20 @@ if __name__=='__main__':
         u = u + dt*(-u*dudx(ux)/dx - v*dudy(uy)/dy + mu*(d2udx2(ux)/dx2+d2udy2(uy)/dy2))
         v = v + dt*(-u*dudx(vx)/dx - v*dudy(vy)/dy + mu*(d2udx2(vx)/dx2+d2udy2(vy)/dy2))
         
-        if i%100==0:
-            writer.add_figure('velocity',addplot(u,v),i)
-        resultu.append(u.detach())
-        resultv.append(v.detach())
+        # if i%100==0:
+        #     writer.add_figure('velocity',addplot(u,v),i)
+        if i%300==0:
+            resultu.append(u.detach())
+            resultv.append(v.detach())
+
         t+=dt
         
 
-    resultu = torch.cat(resultu,dim=0)
-    resultv = torch.cat(resultv,dim=0)
+    resultu = torch.cat(resultu,dim=1)
+    resultv = torch.cat(resultv,dim=1)
+
+    torch.save(resultu,'burgers_p_2Du.pth')
+    torch.save(resultv,'burgers_p_2Dv.pth')
 
 
 

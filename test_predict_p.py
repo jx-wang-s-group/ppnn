@@ -19,6 +19,7 @@ def pde_du(u0, mu) -> torch.Tensor:
     return mcvter.up(padBC_p_r((mu*diffusr(padBC_p(u1))/dx2-0.5*convector(padBC_p(u1*u1))/dx)*dt))
 
 torch.manual_seed(10)
+torch.set_default_tensor_type('torch.DoubleTensor')
 device = torch.device('cuda:0')
 
 mu = torch.tensor([[[0.045]]]).to(device)
@@ -30,13 +31,13 @@ convector = convection1d(accuracy=1,device=device)
 mcvter = mesh_convertor(101,21)
 
     
-writer = SummaryWriter('/home/lxy/store/projects/dynamic/PDE_structure/Jan30/test/noPDE')
+# writer = SummaryWriter('/home/lxy/store/projects/dynamic/PDE_structure/Jan30/test/noPDE_double')
 
 plotID = torch.linspace(49,83,35,dtype=torch.long).to(device)
 ID = torch.arange(0,25000,300,dtype=torch.long).to(device)
-data = torch.load('mu0.045.pth',map_location=device,)[:,ID].reshape(-1,1,101).contiguous().to(torch.float)
+data = torch.load('mu0.045.pth',map_location=device,)[:,ID].reshape(-1,1,101).contiguous().to(torch.double)
 ID2 = torch.linspace(0,15000,51,dtype=torch.long).to(device)
-datao = torch.load('para_burgers.pth',map_location=device,)[:,ID2].contiguous().to(torch.float)
+datao = torch.load('para_burgers.pth',map_location=device,)[:,ID2].contiguous().to(torch.double)
 
 label = data[plotID,0].detach().cpu()
 
@@ -46,7 +47,7 @@ model = pmlp(pdim = 1,
              output_size = 100,
              p_h_layers = 2,
              h0 = 3,
-             hidden_layers = 3,).to(device)
+             hidden_layers = 3,).to(device).to(torch.double)
 
 model.load_state_dict(torch.load('modelp_noPDE-h_2_3-w_48.pth',map_location=device))
 model.eval()

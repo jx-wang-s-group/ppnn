@@ -21,11 +21,11 @@ class pmlp(nn.Module):
                  ) -> None:
         super().__init__()
         self.pnet = gen_net(p_h_layers, pdim, hidden_size, hidden_size)
-        # self.pdenet = gen_net(h0, input_size, hidden_size, hidden_size)
+        self.pdenet = gen_net(h0, input_size, hidden_size, hidden_size)
         self.u0net = gen_net(h0, input_size, hidden_size, hidden_size)
         self.convertnet = gen_net(2, 3, 1, 4)
-        self.hnet = gen_net(hidden_layers, hidden_size, output_size+4, hidden_size)
-        self.smooth = nn.Conv1d(1,1,5,bias=False)
+        self.hnet = gen_net(hidden_layers, hidden_size, output_size, hidden_size)
+        # self.smooth = nn.Conv1d(1,1,5,bias=False)
 
     # def forward(self, u0, pdeu, p):
     #     return self.smooth(self.hnet(
@@ -37,12 +37,12 @@ class pmlp(nn.Module):
     #                 ).mean(dim=-1)))
 
     def forward(self, u0, p):
-        return self.smooth(self.hnet(
+        return self.hnet(
                     torch.stack(
                         (self.pnet(p), 
                          self.u0net(u0)
                         ),dim=-1
-                    ).mean(dim=-1)))
+                    ).mean(dim=-1))
 
 if __name__ == '__main__':
         
@@ -65,7 +65,7 @@ if __name__ == '__main__':
     mcvter = mesh_convertor(101,21)
     EPOCH = int(1e4)+1
     BATCH_SIZE = int(10*21)
-    writer = SummaryWriter('/home/lxy/store/projects/dynamic/PDE_structure/Feb1/modelp_PDE-h_2_3-w_48s')
+    writer = SummaryWriter('/home/lxy/store/projects/dynamic/PDE_structure/Feb1/modelp_PDE-h_2_3-w_48-tanh')
     
     testID0 = torch.tensor([0,10,20],dtype=torch.long)
     testID1 = torch.tensor([0,-1],dtype=torch.long)
@@ -177,5 +177,5 @@ if __name__ == '__main__':
             writer.add_scalar('last_T_rel_error', test_error, i)
             if test_error < test_error_best:
                 test_error_best = test_error
-                torch.save(model.state_dict(), 'modelp_PDE-h_2_3-w_48s.pth')
+                torch.save(model.state_dict(), 'modelp_PDE-h_2_3-w_48-tanh.pth')
     writer.close()
