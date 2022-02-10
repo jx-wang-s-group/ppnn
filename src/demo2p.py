@@ -44,7 +44,7 @@ class mycnn(nn.Module):
 
 
 
-            nn.Conv2d(2,12,6,stride=2,padding=2),
+            nn.Conv2d(3,12,6,stride=2,padding=2),
             nn.ReLU(),
             
             nn.Conv2d(12,48,6,stride=2,padding=2),
@@ -55,9 +55,11 @@ class mycnn(nn.Module):
             nn.PixelShuffle(4),#185
             nn.Conv2d(3,2,5,padding=2),
         )
+        self.cw = nn.Parameter(torch.randn(1,1,1,256)) 
+        self.rw = nn.Parameter(torch.randn(1,1,256,1))
 
-    def forward(self,u0):
-        return self.net(u0)
+    def forward(self,u0,mu):
+        return self.net(torch.cat((u0,mu*self.rw@self.cw),dim=1))
 
 
 if __name__=='__main__':
@@ -72,12 +74,21 @@ if __name__=='__main__':
     device = torch.device('cuda:3')
     feature_size = 257
     cmesh = 49
-    mu = 0.02
     dx = 2*pi/cmesh
     mcvter = mesh_convertor(feature_size,cmesh,dim=2)
     dx2 = dx**2
     dy,dy2=dx,dx2
     dt = 100*1e-4
+
+    mu = torch.linspace(0.02,0.24,23,device=device).reshape(-1,1,1,1)
+
+    # mu for pdedu in dataset
+    mus = mu.unsqueeze(1).repeat(1,200,1,1,1)
+    mus = mus.reshape(-1,1,1,1,)
+
+    mutest = mu[0:1]
+
+    
     
     d2udx2 = d2udx2_2D(accuracy=2,device=device)
     d2udy2 = d2udy2_2D(accuracy=2,device=device)
@@ -113,14 +124,15 @@ if __name__=='__main__':
             )),dim=1)
 
     EPOCH = int(5e3)+1
-    BATCH_SIZE = int(100)
+    BATCH_SIZE = int(800)
     
-    data:torch.Tensor = torch.load('burgers_p_2D.pth',map_location=device,)[0,:-1].to(torch.float)
-    label = data[1:,].detach().cpu()
-    data = data[0:]
-    data_u0 = data[:-1].contiguous()
-    data_du = (data[1:] - data[:-1,]).contiguous()
+
+    data:torch.Tensor = torch.load('burgers_p_2D.pth',map_location=device,)[:,:-1].to(torch.float)
+    label = data[0,1:,].detach().cpu()
+    data_u0 = data[:,:-1].reshape(-1,2,feature_size,feature_size).contiguous()
+    data_du = (data[:,1:] - data[:,:-1,]).reshape(-1,2,feature_size,feature_size).contiguous()
     
+
 
     def add_plot(p,l=None):#
         fig,ax = plt.subplots(1,2,figsize=(10,5))
@@ -133,22 +145,28 @@ if __name__=='__main__':
 
     class myset(torch.utils.data.Dataset):
         def __init__(self):
-            self.u0_normd = (data_u0[:,:,:-1,:-1] - data_u0[:,:,:-1,:-1].mean(dim=(0,2,3),keepdim=True))/data_u0[:,:,:-1,:-1].std(dim=(0,2,3),keepdim=True)
+            self.u0_normd = (data_u0[:,:,:-1,:-1] - data_u0[:,:,:-1,:-1].mean(dim=(0,2,3),keepdim=True))\
+                /data_u0[:,:,:-1,:-1].std(dim=(0,2,3),keepdim=True)
             
-            pdeu = pde_du(data_u0, mu)
+            pdeu = pde_du(data_u0, mus)
             self.pdeu = pdeu[:,:,:-1,:-1].contiguous()
             self.pdeumean = self.pdeu.mean(dim=(0,2,3),keepdim=True)
             self.pdeustd = self.pdeu.std(dim=(0,2,3),keepdim=True)
             self.pdeu = (self.pdeu - self.pdeumean)/self.pdeustd
 
-            self.du = (data_du - pdeu)[:,:,:-1,:-1].contiguous()
-            # self.du = data_du[:,:,:-1,:-1].contiguous()
+            # self.du = (data_du - pdeu)[:,:,:-1,:-1].contiguous()
+            self.du = data_du[:,:,:-1,:-1].contiguous()
             self.outmean = self.du.mean(dim=(0,2,3),keepdim=True)
             self.outstd = self.du.std(dim=(0,2,3),keepdim=True)
             self.du_normd = (self.du - self.outmean)/self.outstd
 
+            self.mu = mus
+            self.mumean = self.mu.mean()
+            self.mustd = self.mu.std()
+            self.mu_normd = (self.mu - self.mu.mean())/self.mu.std()
+
         def __getitem__(self, index):
-            return self.u0_normd[index], self.du_normd[index]
+            return self.u0_normd[index], self.du_normd[index], self.mu_normd[index]
 
         def __len__(self):
             return self.u0_normd.shape[0]
@@ -157,6 +175,7 @@ if __name__=='__main__':
     inmean, instd = data_u0[:,:,:-1,:-1].mean(dim=(0,2,3),keepdim=True), data_u0[:,:,:-1,:-1].std(dim=(0,2,3),keepdim=True)
     pdemean, pdestd = dataset.pdeumean, dataset.pdeustd
     outmean, outstd = dataset.outmean, dataset.outstd
+    mumean, mustd = dataset.mumean, dataset.mustd
     
     print(dt/dx2,'\n')
     
@@ -166,11 +185,11 @@ if __name__=='__main__':
     
     print('Model parameters: {}\n'.format(model_count(model)))
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=100, cooldown=200, verbose=True, min_lr=5e-5)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=100, cooldown=200, verbose=True, min_lr=1e-5)
     criterier = nn.MSELoss()
 
     test_error_best = 1
-    writerdir = '/home/xinyang/store/dynamic/PDE_structure/2D/burgers/PDE-d'
+    writerdir = '/home/xinyang/store/dynamic/PDE_structure/2D/burgers/noPDE-p'
     from torch.utils.tensorboard import SummaryWriter
     writer = SummaryWriter(writerdir)
     for i in range(EPOCH):
@@ -183,17 +202,19 @@ if __name__=='__main__':
                 profile_memory=True,
                 with_stack=True
             ) as prof:
-            for u0,du in train_loader:
+
+            for u0,du,mu in train_loader:
 
                 # u_p = model(u0, pdedu, mu)
                 # noise = 0.05*u0.std()*torch.randn_like(u0)
-                u_p = model(u0)
+                u_p = model(u0,mu)
                 loss = criterier(u_p, du)
                 optimizer.zero_grad()
                 loss.backward()
                 loshis += loss.item()
                 optimizer.step()
                 counter += 1
+                prof.step()
 
         writer.add_scalar('loss', loshis/counter, i)
         scheduler.step(loshis/counter)
@@ -203,13 +224,13 @@ if __name__=='__main__':
 
             model.eval()
             test_re = []
-            u = data[0:1]
+            u = data[0,0:1]
             for _ in range(200):
             
                 # u = padBC_rd(model((u[:,:,:-1,:-1]-inmean)/instd, 
                 #                     (pde_du(u,mutest[:1])[:,:,:-1,:-1]-pdemean)/pdestd,
                 #                     (mutest[:1]-mumean)/mustd)*outstd + outmean) + u + pde_du(u,mutest[:1])
-                u = padBC_rd(model((u[:,:,:-1,:-1]-inmean)/instd)*outstd + outmean) + u + pde_du(u,mu)
+                u = padBC_rd(model((u[:,:,:-1,:-1]-inmean)/instd,(mutest-mumean)/mustd)*outstd + outmean) + u# + pde_du(u,mu)
                 test_re.append(u.detach())
 
             model.train()
@@ -232,5 +253,5 @@ if __name__=='__main__':
             writer.add_scalar('V rel_error', test_error_v, i)
             if test_error < test_error_best:
                 test_error_best = test_error
-                torch.save(model.state_dict(), 'modelp_PDE2D-d.pth')
+                torch.save(model.state_dict(), 'modelp_noPDE2D-p.pth')
     writer.close()
