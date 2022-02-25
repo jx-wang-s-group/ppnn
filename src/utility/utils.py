@@ -1,10 +1,11 @@
 from functools import partial
 import torch
 from torch.nn.functional import interpolate as interp
-from torch.nn.functional import upsample
+
 
 def model_count(model):
     return sum(p.numel() for p in model.parameters())
+
 
 class mesh_convertor(object):
     '''
@@ -25,6 +26,7 @@ class mesh_convertor(object):
     def upnd(self,u):
         return interp(u,mode='bicubic',size=self.fmesh_size,align_corners=True,)
         
+
 
 if __name__ == '__main__':
     from math import pi

@@ -1,6 +1,4 @@
 from typing import List
-from matplotlib.pyplot import cla
-from numpy import isin
 import torch
 from torch.nn.functional import conv1d, conv2d, pad
 
@@ -404,9 +402,112 @@ if __name__=='__main__':
     # plt.show()
 
     ############################ 2D Burgers ###########################
-    from matplotlib import cm
-    device = torch.device('cuda:0')
-    mu = torch.linspace(0.02,0.24,12,device=device).reshape(-1,1,1,1)
+    # from matplotlib import cm
+    # # torch.set_default_tensor_type(torch.DoubleTensor)
+    # torch.manual_seed(10)
+    
+    # device = torch.device('cuda:2')
+    # beta = 0.1
+    # para = 1
+    # repeat = 1
+    # # mu = torch.linspace(0.02,0.10,para,device=device).reshape(-1,1)
+    # # mu = mu.repeat(repeat,1)
+    # num_para = para*repeat
+    # # mu = mu.reshape(-1,1,1,1)
+    # mu = torch.tensor([[[[0.025]]]],device=device)
+
+    # def padbcx(uinner):
+    #     return torch.cat((uinner[:,:,-4:-1],uinner,uinner[:,:,1:4]),dim=2)
+
+    # def padbcy(uinner):
+    #     return torch.cat((uinner[:,:,:,-4:-1],uinner,uinner[:,:,:,1:4]),dim=3)
+        
+
+    # x = torch.linspace(0,2*pi,257,device=device)
+    # y = torch.linspace(0,2*pi,257,device=device)
+    # x,y = torch.meshgrid(x,y,indexing='ij')
+    # x = x.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1,1])
+    # y = y.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1,1])
+    # dt = 1e-4
+    # dx = 0.0125
+    # dy = 0.0125
+    # dx2 = dx**2
+    # dy2 = dy**2
+
+    # t=0
+    # # init = torch.load('burgers_p_2D.pth',map_location='cpu').to(torch.float)
+    # # initu = init[:1,:1,0]
+    # # initv = init[:1,:1,1]
+    # initu = torch.zeros_like(x)
+    # initv = torch.zeros_like(y)
+    # for k in range(-4,5):
+    #     for l in range(-4,5):
+    #         initu += torch.randn_like(mu)*torch.sin(k*x + l*y) + torch.randn_like(mu)*torch.cos(k*x + l*y)
+    #         initv += torch.randn_like(mu)*torch.sin(k*x + l*y) + torch.randn_like(mu)*torch.cos(k*x + l*y)
+    # initu = (initu-initu.amin(dim=(1,2,3),keepdim=True))/(initu.amax(dim=(1,2,3),keepdim=True)-initu.amin(dim=(1,2,3),keepdim=True))  + 0.1
+    # initv = (initv-initv.amin(dim=(1,2,3),keepdim=True))/(initv.amax(dim=(1,2,3),keepdim=True)-initv.amin(dim=(1,2,3),keepdim=True))  + 0.1
+    # u = initu
+    # v = initv
+    
+    # resultu = []
+    # resultv = []
+    # resultu.append(u.detach().cpu())
+    # resultv.append(v.detach().cpu())
+
+    # dudx = dudx_2D('Upwind',accuracy=3,device=device)
+    # dudy = dudy_2D('Upwind',accuracy=3,device=device)
+    # # dudxc = dudx_2D('Central',accuracy=6)
+    # # dudyc = dudy_2D('Central',accuracy=6)
+    # d2udx2 = d2udx2_2D('Central',accuracy=6,device=device)
+    # d2udy2 = d2udy2_2D('Central',accuracy=6,device=device)
+
+    # # from torch.utils.tensorboard import SummaryWriter
+    # # writer = SummaryWriter('/home/lxy/store/projects/dynamic/PDE_structure/2D/burgers/solver/0.02')
+    
+    # # def addplot(u,v):
+    # #     fig,ax = plt.subplots(subplot_kw={"projection": "3d"})
+    # #     ax.plot_surface(x.squeeze(),y.squeeze(),torch.sqrt(u.squeeze() + v.squeeze())**2,cmap=cm.coolwarm)
+    # #     ax.set_zlim(1,4)
+    # #     return fig
+
+    # for i in range(20001):
+        
+    #     ux = padbcx(u)
+    #     uy = padbcy(u)
+    #     vx = padbcx(v)
+    #     vy = padbcy(v)
+        
+    #     uv = u*u+v*v
+    #     u = u + dt*(-u*dudx(ux)/dx - v*dudy(uy)/dy + mu*(d2udx2(ux)/dx2+d2udy2(uy)/dy2) + beta*((1-uv)*u+uv*v))
+    #     v = v + dt*(-u*dudx(vx)/dx - v*dudy(vy)/dy + mu*(d2udx2(vx)/dx2+d2udy2(vy)/dy2) + beta*(-uv*u+(1-uv)*v))
+        
+    #     # if i%100==0:
+    #     #     writer.add_figure('velocity',addplot(u,v),i)
+    #     if i%200==0:
+    #         resultu.append(u.detach().cpu())
+    #         resultv.append(v.detach().cpu())
+    #         print(i)
+
+    #     t+=dt
+        
+
+    # resultu = torch.cat(resultu,dim=1)
+    # resultv = torch.cat(resultv,dim=1)
+    # torch.save(torch.stack((resultu,resultv),dim=2),'burgers_2D_test_un_mu0.025_uninit.pth')
+    # # torch.save(resultu,'burgers_p_2Du.pth')
+    # # torch.save(resultv,'burgers_p_2Dv.pth')
+
+    ######################### RD Equation ##############################
+    torch.manual_seed(20)
+    
+    device = torch.device('cuda:1')
+    beta = 0.1
+    para = 8
+    repeat = 16
+    num_para = para*repeat
+    beta = torch.linspace(0.2,0.8,para,device=device).reshape(-1,1)
+    beta = beta.repeat([repeat,1]).unsqueeze(-1).unsqueeze(-1)
+
     def padbcx(uinner):
         return torch.cat((uinner[:,:,-4:-1],uinner,uinner[:,:,1:4]),dim=2)
 
@@ -414,43 +515,48 @@ if __name__=='__main__':
         return torch.cat((uinner[:,:,:,-4:-1],uinner,uinner[:,:,:,1:4]),dim=3)
         
 
-    x = torch.linspace(0,4,321,device=device)
-    y = torch.linspace(0,4,321,device=device)
-    x,y = torch.meshgrid(x,y)
-    x = x.unsqueeze(0).unsqueeze(0).repeat([12,1,1,1])
-    y = y.unsqueeze(0).unsqueeze(0).repeat([12,1,1,1])
-    dt = 1e-4
-    dx = 0.0125
-    dy = 0.0125
+    x = torch.linspace(0,2*pi,257,device=device)
+    y = torch.linspace(0,2*pi,257,device=device)
+    x,y = torch.meshgrid(x,y,indexing='ij')
+    x = x.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1,1])
+    y = y.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1,1])
+    dt = 1e-5
+    dx = 0.025
+    dy = 0.025
     dx2 = dx**2
     dy2 = dy**2
-
     t=0
-    initu = torch.sin(pi*x + y*pi) + 1.2
-    initv = torch.sin(pi*y - x*pi) + 1.2
+    
+    # initu = torch.zeros_like(x)
+    # initv = torch.zeros_like(y)
+    # for k in range(-8,9):
+    #     for l in range(-8,9):
+    #         initu += torch.randn_like(mu)*torch.sin(k*x + l*y) + torch.randn_like(mu)*torch.cos(k*x + l*y)
+    #         initv += torch.randn_like(mu)*torch.sin(k*x + l*y) + torch.randn_like(mu)*torch.cos(k*x + l*y)
+
+    initu = torch.randn_like(x)
+    initv = torch.randn_like(y)
+    initu = (initu-initu.amin(dim=(1,2,3),keepdim=True))/(initu.amax(dim=(1,2,3),keepdim=True)-initu.amin(dim=(1,2,3),keepdim=True))  + 0.1
+    initv = (initv-initv.amin(dim=(1,2,3),keepdim=True))/(initv.amax(dim=(1,2,3),keepdim=True)-initv.amin(dim=(1,2,3),keepdim=True))  + 0.1
     u = initu
     v = initv
     
     resultu = []
     resultv = []
-    resultu.append(u.detach())
-    resultv.append(v.detach())
+    resultu.append(u.detach().cpu())
+    resultv.append(v.detach().cpu())
 
-    dudx = dudx_2D('Upwind',accuracy=3,device=device)
-    dudy = dudy_2D('Upwind',accuracy=3,device=device)
-    # dudxc = dudx_2D('Central',accuracy=6)
-    # dudyc = dudy_2D('Central',accuracy=6)
     d2udx2 = d2udx2_2D('Central',accuracy=6,device=device)
     d2udy2 = d2udy2_2D('Central',accuracy=6,device=device)
 
-    # from torch.utils.tensorboard import SummaryWriter
-    # writer = SummaryWriter('/home/lxy/store/projects/dynamic/PDE_structure/2D/burgers/solver/0.02')
-    
-    # def addplot(u,v):
-    #     fig,ax = plt.subplots(subplot_kw={"projection": "3d"})
-    #     ax.plot_surface(x.squeeze(),y.squeeze(),torch.sqrt(u.squeeze() + v.squeeze())**2,cmap=cm.coolwarm)
-    #     ax.set_zlim(1,4)
-    #     return fig
+    from torch.utils.tensorboard import SummaryWriter
+    writer = SummaryWriter('/home/xinyang/store/dynamic/PDE_structure/2D/RD/solver/2')
+
+    def addplot(u,v):
+        fig,ax = plt.subplots(1,2,figsize=(10,5))
+        ax[0].pcolormesh(u)
+        ax[1].pcolormesh(v)
+        return fig
 
     for i in range(20001):
         
@@ -459,24 +565,22 @@ if __name__=='__main__':
         vx = padbcx(v)
         vy = padbcy(v)
         
-        u = u + dt*(-u*dudx(ux)/dx - v*dudy(uy)/dy + mu*(d2udx2(ux)/dx2+d2udy2(uy)/dy2))
-        v = v + dt*(-u*dudx(vx)/dx - v*dudy(vy)/dy + mu*(d2udx2(vx)/dx2+d2udy2(vy)/dy2))
+        u = u + dt*(d2udx2(ux)/dx2 + d2udy2(uy)/dy2 + u - u*u*u - v+0.01)
+        v = v + dt*(d2udx2(vx)/dx2 + d2udy2(vy)/dy2 + beta*(u - v))
         
-        # if i%100==0:
-        #     writer.add_figure('velocity',addplot(u,v),i)
-        if i%300==0:
-            resultu.append(u.detach())
-            resultv.append(v.detach())
+        if i%100==0:
+            writer.add_figure('velocity0',addplot(u[0,0].detach().cpu(),v[0,0].detach().cpu()),i)
+            writer.add_figure('velocity1',addplot(u[-1,0].detach().cpu(),v[-1,0].detach().cpu()),i)
+        if i%200==0:
+            resultu.append(u.detach().cpu())
+            resultv.append(v.detach().cpu())
+            print(i)
 
         t+=dt
         
 
     resultu = torch.cat(resultu,dim=1)
     resultv = torch.cat(resultv,dim=1)
-
-    torch.save(resultu,'burgers_p_2Du.pth')
-    torch.save(resultv,'burgers_p_2Dv.pth')
-
-
-
-
+    # torch.save(torch.stack((resultu,resultv),dim=2),'burgers_2D_test_un_mu0.025_uninit.pth')
+    # torch.save(resultu,'burgers_p_2Du.pth')
+    # torch.save(resultv,'burgers_p_2Dv.pth')
