@@ -1,0 +1,49 @@
+---
+seed:           10
+device:         cuda:3
+
+
+# mesh, time
+finemeshsize:   257
+coarsemeshsize: 49
+timesteps:      50
+length:         6.4
+dt:             0.002
+datatimestart:  10
+
+
+
+# parameters
+parahigh:       0.8
+paralow:        0.2
+num_para:       8
+repeat:         16
+
+
+# data
+datafile:       RD_p.pth
+
+# network
+network:        cnn2d
+
+
+# training
+epochs:         3200
+batchsize:      800
+lr:             1.e-3
+noiseinject:    False
+
+
+# add pde?
+pde:            False
+
+
+# path
+tensorboarddir: /home/xinyang/store/dynamic/PDE_structure/2D/RD/noPDE
+modelsavepath:  model_rd_p_noPDE.pth
+
+
+# equation
+rhsu:           rd0u
+rhsv:           rd0v
+...

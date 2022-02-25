@@ -2,11 +2,6 @@ from typing import List
 import torch
 from torch.nn.functional import conv1d, conv2d, pad
 
-def attach1d1():
-    pass
-
-def attach1dp():
-    pass
 
 class operator_base1D(object):
     '''
@@ -169,7 +164,7 @@ class operator_base2D(object):
         self.accuracy = accuracy
         self.device = device
         
-        self.centralfilters_y = [None,None,
+        self.centralfilters_y_2nd_derivative = [None,None,
             torch.tensor(
                 [[[[1., -2., 1.]]]],device=self.device),
             None,
@@ -182,7 +177,13 @@ class operator_base2D(object):
             torch.tensor(
                 [[[[-1/560, 8/315, -1/5, 8/5, -205/72, 8/5, -1/5, 8/315, -1/560]]]],device=self.device)
         ]
-
+        self.centralfilters_y_4th_derivative = [None,None,
+            torch.tensor([[[[1., -4., 6., -4., 1.]]]],device=self.device),
+            None,
+            torch.tensor([[[[-1/6, 2, -13/2, 28/3, -13/2, 2, -1/6]]]],device=self.device),
+            None,
+            torch.tensor([[[[7/240, -2/5, 169/60, -122/15, 91/8, -122/15, 169/60, -2/5, 7/240]]]],device=self.device),
+        ]
         self.forwardfilters_y:List(torch.Tensor) = [None,
             torch.tensor(
                 [[[[-1., 1.]]]],device=self.device),
@@ -201,18 +202,21 @@ class operator_base2D(object):
                 [[[[-1/3, 3/2, -3., 11/6]]]],device=self.device),
         ]
 
-        self.centralfilters_x:List(torch.Tensor) = permute_y2x(self.centralfilters_y)
+        self.centralfilters_x_2nd_derivative:List(torch.Tensor) = permute_y2x(self.centralfilters_y_2nd_derivative)
+        self.centralfilters_x_4th_derivative:List(torch.Tensor) = permute_y2x(self.centralfilters_y_4th_derivative)
         self.forwardfilters_x:List(torch.Tensor) = permute_y2x(self.forwardfilters_y)
         self.backwardfilters_x:List(torch.Tensor) = permute_y2x(self.backwardfilters_y)
 
-        self.xschemes = {'Central':self.centralfilters_x,
-                        'Forward':self.forwardfilters_x,
-                        'Backward':self.backwardfilters_x}
-        self.yschemes = {'Central':self.centralfilters_y,
-                        'Forward':self.forwardfilters_y,
-                        'Backward':self.backwardfilters_y}
+        self.xschemes = {'Central2':self.centralfilters_x_2nd_derivative,
+                        'Central4':self.centralfilters_x_4th_derivative,
+                        'Forward1':self.forwardfilters_x,
+                        'Backward1':self.backwardfilters_x}
+        self.yschemes = {'Central2':self.centralfilters_y_2nd_derivative,
+                        'Central4':self.centralfilters_y_4th_derivative,
+                        'Forward1':self.forwardfilters_y,
+                        'Backward1':self.backwardfilters_y}
 
-        self.yschemes['Upwind'] =  [(None,None),
+        self.yschemes['Upwind1'] =  [(None,None),
             (torch.tensor([[[[0, -1., 1.]]]],device=self.device),
              torch.tensor([[[[-1., 1., 0.]]]],device=self.device)),
             (torch.tensor([[[[0, 0, -3/2, 2., -1/2]]]],device=self.device),
@@ -221,19 +225,19 @@ class operator_base2D(object):
              torch.tensor([[[[-1/3, 3/2, -3., 11/6, 0, 0, 0]]]],device=self.device)), 
         ]
 
-        self.xschemes['Upwind'] = {}
-        for i,v in enumerate(self.yschemes['Upwind']):
-            self.xschemes['Upwind'][i] = permute_y2x(v)
+        self.xschemes['Upwind1'] = {}
+        for i,v in enumerate(self.yschemes['Upwind1']):
+            self.xschemes['Upwind1'][i] = permute_y2x(v)
 
     def __call__(self, u:torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
 
 class d2udx2_2D(operator_base2D):
-    def __init__(self, scheme='Central', accuracy = 2, device='cpu') -> None:
+    def __init__(self, scheme='Central2', accuracy = 2, device='cpu') -> None:
         super().__init__(accuracy, device)
         assert accuracy%2 == 0, 'diffusion operator precision must be even number'
-        assert scheme == 'Central'
+        assert scheme == 'Central2' or scheme == 'Central4' or scheme == 'Forward1' or scheme == 'Backward1', 'scheme must be one of the following: Central2, Central4, Forward1, Backward1'
         
         self.filter  = self.xschemes[scheme][accuracy]
 
@@ -241,42 +245,41 @@ class d2udx2_2D(operator_base2D):
         return conv2d(u, self.filter)
 
 class d2udy2_2D(operator_base2D):
-    def __init__(self, scheme='Central', accuracy = 2, device='cpu') -> None:
+    def __init__(self, scheme='Central2', accuracy = 2, device='cpu') -> None:
         super().__init__(accuracy, device)
         assert accuracy%2 == 0, 'diffusion operator precision must be even number'
-        assert scheme == 'Central'
+        assert scheme == 'Central2' or scheme == 'Central4' or scheme == 'Forward1' or scheme == 'Backward1', 'scheme must be one of the following: Central2, Central4, Forward1, Backward1'
         self.filter  = self.yschemes[scheme][accuracy]
 
     def __call__(self, u:torch.Tensor) -> torch.Tensor:
         return conv2d(u, self.filter)
 
 class dudx_2D(operator_base2D):
-    def __init__(self, scheme='Upwind', accuracy = 1, device='cpu') -> None:
+    def __init__(self, scheme='Upwind1', accuracy = 1, device='cpu') -> None:
         super().__init__(accuracy, device)
         self.xscheme = scheme
         self.filter = self.xschemes[scheme][accuracy]
 
     def __call__(self, u: torch.Tensor) -> torch.Tensor:
-        if self.xscheme == 'Upwind':
+        if self.xscheme == 'Upwind1':
             return (u[:,:,self.accuracy:-self.accuracy]<=0)*conv2d(u, self.filter[0]) +\
                  (u[:,:,self.accuracy:-self.accuracy]>0)*conv2d(u, self.filter[1])
         else:
             return conv2d(u, self.filter)
 
 class dudy_2D(operator_base2D):
-    def __init__(self, scheme='Upwind', accuracy = 1, device='cpu') -> None:
+    def __init__(self, scheme='Upwind1', accuracy = 1, device='cpu') -> None:
         super().__init__(accuracy, device)
         self.yscheme = scheme
         self.filter = self.yschemes[scheme][accuracy]
 
     def __call__(self, u: torch.Tensor) -> torch.Tensor:
-        if self.yscheme == 'Upwind':
+        if self.yscheme == 'Upwind1':
             return (u[:,:,:,self.accuracy:-self.accuracy]<=0)*conv2d(u, self.filter[0]) +\
                  (u[:,:,:,self.accuracy:-self.accuracy]>0)*conv2d(u, self.filter[1])
         else:
             return conv2d(u, self.filter)
         
-
 
 
 if __name__=='__main__':
@@ -293,6 +296,7 @@ if __name__=='__main__':
         ax.set_ylim([.4,2.6])
         return fig
 
+    # region
     ##################### test diffusion operator #####################
     # def truth(x,t):
     #     return exp(-16*pi*pi*t)*torch.sin(4*pi*x)
@@ -400,21 +404,21 @@ if __name__=='__main__':
     # plt.plot(x,init[0,0],'--',label='init')
     # plt.legend()
     # plt.show()
+    # endregion
 
-    ############################ 2D Burgers ###########################
-    # from matplotlib import cm
-    # # torch.set_default_tensor_type(torch.DoubleTensor)
+
+    # region #################### 2D Burgers ###########################
     # torch.manual_seed(10)
     
-    # device = torch.device('cuda:2')
+    # device = torch.device('cuda:0')
     # beta = 0.1
-    # para = 1
-    # repeat = 1
-    # # mu = torch.linspace(0.02,0.10,para,device=device).reshape(-1,1)
-    # # mu = mu.repeat(repeat,1)
+    # para = 8
+    # repeat = 32
+    # mu = torch.linspace(0.02,0.09,para,device=device).reshape(-1,1)
+    # mu = mu.repeat(repeat,1)
     # num_para = para*repeat
-    # # mu = mu.reshape(-1,1,1,1)
-    # mu = torch.tensor([[[[0.025]]]],device=device)
+    # mu = mu.reshape(-1,1,1,1)
+    # # mu = torch.tensor([[[[0.025]]]],device=device)
 
     # def padbcx(uinner):
     #     return torch.cat((uinner[:,:,-4:-1],uinner,uinner[:,:,1:4]),dim=2)
@@ -435,9 +439,7 @@ if __name__=='__main__':
     # dy2 = dy**2
 
     # t=0
-    # # init = torch.load('burgers_p_2D.pth',map_location='cpu').to(torch.float)
-    # # initu = init[:1,:1,0]
-    # # initv = init[:1,:1,1]
+    
     # initu = torch.zeros_like(x)
     # initv = torch.zeros_like(y)
     # for k in range(-4,5):
@@ -451,15 +453,13 @@ if __name__=='__main__':
     
     # resultu = []
     # resultv = []
-    # resultu.append(u.detach().cpu())
-    # resultv.append(v.detach().cpu())
 
-    # dudx = dudx_2D('Upwind',accuracy=3,device=device)
-    # dudy = dudy_2D('Upwind',accuracy=3,device=device)
+    # dudx = dudx_2D('Upwind1',accuracy=3,device=device)
+    # dudy = dudy_2D('Upwind1',accuracy=3,device=device)
     # # dudxc = dudx_2D('Central',accuracy=6)
     # # dudyc = dudy_2D('Central',accuracy=6)
-    # d2udx2 = d2udx2_2D('Central',accuracy=6,device=device)
-    # d2udy2 = d2udy2_2D('Central',accuracy=6,device=device)
+    # d2udx2 = d2udx2_2D('Central2',accuracy=6,device=device)
+    # d2udy2 = d2udy2_2D('Central2',accuracy=6,device=device)
 
     # # from torch.utils.tensorboard import SummaryWriter
     # # writer = SummaryWriter('/home/lxy/store/projects/dynamic/PDE_structure/2D/burgers/solver/0.02')
@@ -470,7 +470,7 @@ if __name__=='__main__':
     # #     ax.set_zlim(1,4)
     # #     return fig
 
-    # for i in range(20001):
+    # for i in range(3201):
         
     #     ux = padbcx(u)
     #     uy = padbcy(u)
@@ -493,20 +493,276 @@ if __name__=='__main__':
 
     # resultu = torch.cat(resultu,dim=1)
     # resultv = torch.cat(resultv,dim=1)
-    # torch.save(torch.stack((resultu,resultv),dim=2),'burgers_2D_test_un_mu0.025_uninit.pth')
+    # torch.save(torch.stack((resultu,resultv),dim=2),'burgers_2D_transfer.pth')
     # # torch.save(resultu,'burgers_p_2Du.pth')
     # # torch.save(resultv,'burgers_p_2Dv.pth')
+    # endregion
 
-    ######################### RD Equation ##############################
-    torch.manual_seed(20)
+    # region ################## RD Equation ##############################
+    # torch.manual_seed(20)
     
-    device = torch.device('cuda:1')
-    beta = 0.1
-    para = 8
-    repeat = 16
+    # device = torch.device('cuda:1')
+    # beta = 0.1
+    # para = 8
+    # repeat = 16
+    # num_para = para*repeat
+    # beta = torch.linspace(0.2,0.8,para,device=device).reshape(-1,1)
+    # beta = beta.repeat([repeat,1]).unsqueeze(-1).unsqueeze(-1)
+
+    # def padbcx(uinner):
+    #     return torch.cat((uinner[:,:,-4:-1],uinner,uinner[:,:,1:4]),dim=2)
+
+    # def padbcy(uinner):
+    #     return torch.cat((uinner[:,:,:,-4:-1],uinner,uinner[:,:,:,1:4]),dim=3)
+        
+
+    # x = torch.linspace(0,2*pi,257,device=device)
+    # y = torch.linspace(0,2*pi,257,device=device)
+    # x,y = torch.meshgrid(x,y,indexing='ij')
+    # x = x.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1,1])
+    # y = y.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1,1])
+    # dt = 1e-5
+    # dx = 0.025
+    # dy = 0.025
+    # dx2 = dx**2
+    # dy2 = dy**2
+    # t=0
+    
+    # # initu = torch.zeros_like(x)
+    # # initv = torch.zeros_like(y)
+    # # for k in range(-8,9):
+    # #     for l in range(-8,9):
+    # #         initu += torch.randn_like(mu)*torch.sin(k*x + l*y) + torch.randn_like(mu)*torch.cos(k*x + l*y)
+    # #         initv += torch.randn_like(mu)*torch.sin(k*x + l*y) + torch.randn_like(mu)*torch.cos(k*x + l*y)
+
+    # initu = torch.randn_like(x)
+    # initv = torch.randn_like(y)
+    # initu = (initu-initu.amin(dim=(1,2,3),keepdim=True))/(initu.amax(dim=(1,2,3),keepdim=True)-initu.amin(dim=(1,2,3),keepdim=True))  + 0.1
+    # initv = (initv-initv.amin(dim=(1,2,3),keepdim=True))/(initv.amax(dim=(1,2,3),keepdim=True)-initv.amin(dim=(1,2,3),keepdim=True))  + 0.1
+    # u = initu
+    # v = initv
+    
+    # resultu = []
+    # resultv = []
+
+    # d2udx2 = d2udx2_2D('Central',accuracy=6,device=device)
+    # d2udy2 = d2udy2_2D('Central',accuracy=6,device=device)
+
+    # from torch.utils.tensorboard import SummaryWriter
+    # writer = SummaryWriter('/home/xinyang/store/dynamic/PDE_structure/2D/RD/solver/2')
+
+    # def addplot(u,v):
+    #     fig,ax = plt.subplots(1,2,figsize=(10,5))
+    #     ax[0].pcolormesh(u)
+    #     ax[1].pcolormesh(v)
+    #     return fig
+
+    # for i in range(20001):
+        
+    #     ux = padbcx(u)
+    #     uy = padbcy(u)
+    #     vx = padbcx(v)
+    #     vy = padbcy(v)
+        
+    #     u = u + dt*(d2udx2(ux)/dx2 + d2udy2(uy)/dy2 + u - u*u*u - v+0.01)
+    #     v = v + dt*(d2udx2(vx)/dx2 + d2udy2(vy)/dy2 + beta*(u - v))
+        
+    #     if i%100==0:
+    #         writer.add_figure('velocity0',addplot(u[0,0].detach().cpu(),v[0,0].detach().cpu()),i)
+    #         writer.add_figure('velocity1',addplot(u[-1,0].detach().cpu(),v[-1,0].detach().cpu()),i)
+    #     if i%200==0:
+    #         resultu.append(u.detach().cpu())
+    #         resultv.append(v.detach().cpu())
+    #         print(i)
+
+    #     t+=dt
+        
+
+    # resultu = torch.cat(resultu,dim=1)
+    # resultv = torch.cat(resultv,dim=1)
+    # torch.save(torch.stack((resultu,resultv),dim=2),'burgers_2D_test_un_mu0.025_uninit.pth')
+    # torch.save(resultu,'burgers_p_2Du.pth')
+    # torch.save(resultv,'burgers_p_2Dv.pth')
+    # endregion ################## RD Equation ##############################
+
+    # region ################# 2D Diffusion ##############################
+    # torch.manual_seed(10)
+    
+    # device = torch.device('cuda:0')
+    # para = 8
+    # repeat = 32
+    # mu = torch.linspace(0.02,0.09,para,device=device).reshape(-1,1,1,1)
+    # mu = mu.repeat(repeat,1,1,1)
+    # num_para = para*repeat
+
+    # def padbcx(uinner):
+    #     return torch.cat((uinner[:,:,-4:-1],uinner,uinner[:,:,1:4]),dim=2)
+
+    # def padbcy(uinner):
+    #     return torch.cat((uinner[:,:,:,-4:-1],uinner,uinner[:,:,:,1:4]),dim=3)
+        
+
+    # x = torch.linspace(0,2*pi,257,device=device)
+    # y = torch.linspace(0,2*pi,257,device=device)
+    # x,y = torch.meshgrid(x,y,indexing='ij')
+    # x = x.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1,1])
+    # y = y.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1,1])
+    # dt = 1e-4
+    # dx = 0.0125
+    # dy = 0.0125
+    # dx2 = dx**2
+    # dy2 = dy**2
+
+    # t=0
+    
+    # initu = torch.zeros_like(x)
+    # initv = torch.zeros_like(y)
+    # for k in range(-4,5):
+    #     for l in range(-4,5):
+    #         initu += torch.randn_like(mu)*torch.sin(k*x + l*y) + torch.randn_like(mu)*torch.cos(k*x + l*y)
+    #         initv += torch.randn_like(mu)*torch.sin(k*x + l*y) + torch.randn_like(mu)*torch.cos(k*x + l*y)
+    # initu = (initu-initu.amin(dim=(1,2,3),keepdim=True))/(initu.amax(dim=(1,2,3),keepdim=True)-initu.amin(dim=(1,2,3),keepdim=True))  + 0.1
+    # initv = (initv-initv.amin(dim=(1,2,3),keepdim=True))/(initv.amax(dim=(1,2,3),keepdim=True)-initv.amin(dim=(1,2,3),keepdim=True))  + 0.1
+    # u = initu
+    # v = initv
+    
+    # resultu = []
+    # resultv = []
+
+    # dudx = dudx_2D('Upwind',accuracy=3,device=device)
+    # dudy = dudy_2D('Upwind',accuracy=3,device=device)
+    # d2udx2 = d2udx2_2D('Central',accuracy=6,device=device)
+    # d2udy2 = d2udy2_2D('Central',accuracy=6,device=device)
+
+    # from torch.utils.tensorboard import SummaryWriter
+    # writer = SummaryWriter('/home/xinyang/store/dynamic/PDE_structure/2D/transfer/solver/diffusion')
+    
+    # def addplot(u,v):
+    #     fig,ax = plt.subplots(1,2,figsize=(10,5))
+    #     ax[0].pcolormesh(u[0,0])
+    #     ax[1].pcolormesh(v[0,0])
+    #     return fig
+
+    # for i in range(3201):
+        
+    #     ux = padbcx(u)
+    #     uy = padbcy(u)
+    #     vx = padbcx(v)
+    #     vy = padbcy(v)
+        
+    #     uv = u*u+v*v
+    #     u = u + dt*(mu*(d2udx2(ux)/dx2+d2udy2(uy)/dy2))
+    #     v = v + dt*(mu*(d2udx2(vx)/dx2+d2udy2(vy)/dy2))
+        
+    #     if i%100==0:
+    #         writer.add_figure('velocity',addplot(u.detach().cpu(),v.detach().cpu()),i)
+    #     if i%200==0:
+    #         resultu.append(u.detach().cpu())
+    #         resultv.append(v.detach().cpu())
+    #         print(i)
+
+    #     t+=dt
+        
+
+    # resultu = torch.cat(resultu,dim=1)
+    # resultv = torch.cat(resultv,dim=1)
+    # torch.save(torch.stack((resultu,resultv),dim=2),'diffusion_2D_p.pth')
+    # endregion
+
+    # region #################### 2D Convection ##############################
+    
+    # torch.manual_seed(10)
+    
+    # device = torch.device('cuda:0')
+    # para = 1
+    # repeat = 32 * 8
+    # mu = torch.linspace(0.02,0.9,para,device=device).reshape(-1,1,1,1)
+    # mu = mu.repeat(repeat,1,1,1)
+    # num_para = para*repeat
+
+    # def padbcx(uinner):
+    #     return torch.cat((uinner[:,:,-4:-1],uinner,uinner[:,:,1:4]),dim=2)
+
+    # def padbcy(uinner):
+    #     return torch.cat((uinner[:,:,:,-4:-1],uinner,uinner[:,:,:,1:4]),dim=3)
+        
+
+    # x = torch.linspace(0,2*pi,257,device=device)
+    # y = torch.linspace(0,2*pi,257,device=device)
+    # x,y = torch.meshgrid(x,y,indexing='ij')
+    # x = x.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1,1])
+    # y = y.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1,1])
+    # dt = 1e-4
+    # dx = 0.0125
+    # dy = 0.0125
+    # dx2 = dx**2
+    # dy2 = dy**2
+
+    # t=0
+    
+    # initu = torch.zeros_like(x)
+    # initv = torch.zeros_like(y)
+    # for k in range(-4,5):
+    #     for l in range(-4,5):
+    #         initu += torch.randn_like(mu)*torch.sin(k*x + l*y) + torch.randn_like(mu)*torch.cos(k*x + l*y)
+    #         initv += torch.randn_like(mu)*torch.sin(k*x + l*y) + torch.randn_like(mu)*torch.cos(k*x + l*y)
+    # initu = (initu-initu.amin(dim=(1,2,3),keepdim=True))/(initu.amax(dim=(1,2,3),keepdim=True)-initu.amin(dim=(1,2,3),keepdim=True))  + 0.1
+    # initv = (initv-initv.amin(dim=(1,2,3),keepdim=True))/(initv.amax(dim=(1,2,3),keepdim=True)-initv.amin(dim=(1,2,3),keepdim=True))  + 0.1
+    # u = initu
+    # v = initv
+    
+    # resultu = []
+    # resultv = []
+
+    # dudx = dudx_2D('Upwind',accuracy=3,device=device)
+    # dudy = dudy_2D('Upwind',accuracy=3,device=device)
+    # d2udx2 = d2udx2_2D('Central',accuracy=6,device=device)
+    # d2udy2 = d2udy2_2D('Central',accuracy=6,device=device)
+
+    # from torch.utils.tensorboard import SummaryWriter
+    # writer = SummaryWriter('/home/xinyang/store/dynamic/PDE_structure/2D/transfer/solver/convection')
+    
+    # def addplot(u,v):
+    #     fig,ax = plt.subplots(1,2,figsize=(10,5))
+    #     ax[0].pcolormesh(u[0,0])
+    #     ax[1].pcolormesh(v[0,0])
+    #     return fig
+
+    # for i in range(3201):
+        
+    #     ux = padbcx(u)
+    #     uy = padbcy(u)
+    #     vx = padbcx(v)
+    #     vy = padbcy(v)
+        
+    #     u = u + dt*(-u*dudx(ux)/dx - v*dudy(uy)/dy)
+    #     v = v + dt*(-u*dudx(vx)/dx - v*dudy(vy)/dy)
+        
+    #     if i%100==0:
+    #         writer.add_figure('velocity',addplot(u.detach().cpu(),v.detach().cpu()),i)
+    #     if i%200==0:
+    #         resultu.append(u.detach().cpu())
+    #         resultv.append(v.detach().cpu())
+    #         print(i)
+
+    #     t+=dt
+        
+
+    # resultu = torch.cat(resultu,dim=1)
+    # resultv = torch.cat(resultv,dim=1)
+    # torch.save(torch.stack((resultu,resultv),dim=2),'convection_2D.pth')
+    
+    # endregion ####################
+
+    # region ##################### 2D KS ##############################
+    torch.manual_seed(42)
+    
+    device = torch.device('cuda:2')
+    para = 1
+    repeat = 32 * 8
+    mu = torch.linspace(0.02,0.9,para,device=device).reshape(-1,1,1,1)
+    mu = mu.repeat(repeat,1,1,1)
     num_para = para*repeat
-    beta = torch.linspace(0.2,0.8,para,device=device).reshape(-1,1)
-    beta = beta.repeat([repeat,1]).unsqueeze(-1).unsqueeze(-1)
 
     def padbcx(uinner):
         return torch.cat((uinner[:,:,-4:-1],uinner,uinner[:,:,1:4]),dim=2)
@@ -515,72 +771,66 @@ if __name__=='__main__':
         return torch.cat((uinner[:,:,:,-4:-1],uinner,uinner[:,:,:,1:4]),dim=3)
         
 
-    x = torch.linspace(0,2*pi,257,device=device)
-    y = torch.linspace(0,2*pi,257,device=device)
+    x = torch.linspace(0,2*pi,129,device=device)
+    y = torch.linspace(0,2*pi,129,device=device)
     x,y = torch.meshgrid(x,y,indexing='ij')
     x = x.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1,1])
     y = y.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1,1])
     dt = 1e-5
-    dx = 0.025
-    dy = 0.025
+    dx = 0.08
+    dy = 0.08
     dx2 = dx**2
     dy2 = dy**2
+    dx4 = dx2**2
+    dy4 = dy2**2
+    print(dt/dx4)
     t=0
     
-    # initu = torch.zeros_like(x)
-    # initv = torch.zeros_like(y)
-    # for k in range(-8,9):
-    #     for l in range(-8,9):
+    initu = torch.zeros_like(x)
+    
+    # for k in range(-2,3):
+    #     for l in range(-2,3):
     #         initu += torch.randn_like(mu)*torch.sin(k*x + l*y) + torch.randn_like(mu)*torch.cos(k*x + l*y)
-    #         initv += torch.randn_like(mu)*torch.sin(k*x + l*y) + torch.randn_like(mu)*torch.cos(k*x + l*y)
-
-    initu = torch.randn_like(x)
-    initv = torch.randn_like(y)
-    initu = (initu-initu.amin(dim=(1,2,3),keepdim=True))/(initu.amax(dim=(1,2,3),keepdim=True)-initu.amin(dim=(1,2,3),keepdim=True))  + 0.1
-    initv = (initv-initv.amin(dim=(1,2,3),keepdim=True))/(initv.amax(dim=(1,2,3),keepdim=True)-initv.amin(dim=(1,2,3),keepdim=True))  + 0.1
+    # initu = (initu-initu.amin(dim=(1,2,3),keepdim=True))/(initu.amax(dim=(1,2,3),keepdim=True)-initu.amin(dim=(1,2,3),keepdim=True))  + 0.1
+    initu = torch.sin(x+y) + torch.sin(x) + torch.sin(y)
     u = initu
-    v = initv
     
     resultu = []
-    resultv = []
-    resultu.append(u.detach().cpu())
-    resultv.append(v.detach().cpu())
 
-    d2udx2 = d2udx2_2D('Central',accuracy=6,device=device)
-    d2udy2 = d2udy2_2D('Central',accuracy=6,device=device)
+    dudx = dudx_2D('Upwind1',accuracy=3,device=device)
+    dudy = dudy_2D('Upwind1',accuracy=3,device=device)
+    d2udx2 = d2udx2_2D('Central2',accuracy=6,device=device)
+    d2udy2 = d2udy2_2D('Central2',accuracy=6,device=device)
+    d4udx4 = d2udx2_2D('Central4',accuracy=4,device=device)
+    d4udy4 = d2udy2_2D('Central4',accuracy=4,device=device)
 
     from torch.utils.tensorboard import SummaryWriter
-    writer = SummaryWriter('/home/xinyang/store/dynamic/PDE_structure/2D/RD/solver/2')
-
-    def addplot(u,v):
-        fig,ax = plt.subplots(1,2,figsize=(10,5))
-        ax[0].pcolormesh(u)
-        ax[1].pcolormesh(v)
+    writer = SummaryWriter('/home/xinyang/store/dynamic/PDE_structure/2D/transfer/solver/KS')
+    
+    def addplot(u):
+        fig,ax = plt.subplots()
+        p=ax.pcolormesh(u[0,0])
+        fig.colorbar(p)
         return fig
 
     for i in range(20001):
         
         ux = padbcx(u)
         uy = padbcy(u)
-        vx = padbcx(v)
-        vy = padbcy(v)
+    
+        u = u + dt*(- d2udx2(ux)/dx2 - d2udy2(uy)/dy2 - d4udx4(ux)/dx4 - d4udy4(uy)/dy4 - u*dudx(ux)/dx - u*dudy(uy)/dy)
         
-        u = u + dt*(d2udx2(ux)/dx2 + d2udy2(uy)/dy2 + u - u*u*u - v+0.01)
-        v = v + dt*(d2udx2(vx)/dx2 + d2udy2(vy)/dy2 + beta*(u - v))
         
-        if i%100==0:
-            writer.add_figure('velocity0',addplot(u[0,0].detach().cpu(),v[0,0].detach().cpu()),i)
-            writer.add_figure('velocity1',addplot(u[-1,0].detach().cpu(),v[-1,0].detach().cpu()),i)
+        if i%2==0:
+            writer.add_figure('velocity',addplot(u.detach().cpu()),i)
         if i%200==0:
             resultu.append(u.detach().cpu())
-            resultv.append(v.detach().cpu())
             print(i)
 
         t+=dt
         
 
     resultu = torch.cat(resultu,dim=1)
-    resultv = torch.cat(resultv,dim=1)
-    # torch.save(torch.stack((resultu,resultv),dim=2),'burgers_2D_test_un_mu0.025_uninit.pth')
-    # torch.save(resultu,'burgers_p_2Du.pth')
-    # torch.save(resultv,'burgers_p_2Dv.pth')
+    torch.save(resultu,'KS_2D.pth')
+
+    # endregion ####################

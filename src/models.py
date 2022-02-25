@@ -85,3 +85,25 @@ class cnn2d(nn.Module):
 
     def forward(self,u0,mu):
         return self.net(torch.cat((u0,mu*self.rw@self.cw),dim=1))
+
+
+class cnn2dnop(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.net = nn.Sequential(
+
+            nn.Conv2d(2,12,6,stride=2,padding=2),
+            nn.ReLU(),
+            
+            nn.Conv2d(12,48,6,stride=2,padding=2),
+            nn.ReLU(),
+            cblock(48,5,[48,64,64]),
+            cblock(48,5,[48,64,64]),
+            cblock(48,5,[48,64,64]),
+            nn.PixelShuffle(4),#185
+            nn.Conv2d(3,2,5,padding=2),
+        )
+
+    def forward(self,u0,mu):
+        return self.net(u0)
+

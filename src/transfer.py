@@ -13,11 +13,16 @@ from src.operators import d2udx2_2D, d2udy2_2D, dudx_2D, dudy_2D
 from src.utility.utils import mesh_convertor, model_count
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
+
+    # prepare data
+    
+    num_premodels = 2
     inputfile = sys.argv[1]
     params = SimpleNamespace(**yaml.load(open(inputfile), Loader=yaml.FullLoader))
     np.random.seed(params.seed)
     torch.manual_seed(params.seed)
+
     device = torch.device(params.device)
     feature_size = params.finemeshsize
     cmesh = params.coarsemeshsize
@@ -34,11 +39,24 @@ if __name__=='__main__':
     # mu for pdedu in dataset
     mus = mu.unsqueeze(1).repeat(1,timesteps,1,1,1)
     mus = mus.reshape(-1,1,1,1,)
+    
+    mupre = torch.linspace(params.paralow,params.parahigh,params.num_para,device=device).reshape(-1,1)
+    mupre = mupre.repeat(32,1).reshape(-1,1,1,1)
+    muspre = mupre.unsqueeze(1).repeat(1,timesteps,1,1,1)
+    muspre = muspre.reshape(-1,1,1,1,)
 
     mutest = mu[0:1]
 
     rhsu = getattr(rhs,params.rhsu)
     rhsv = getattr(rhs,params.rhsv)
+
+    rhsu0 = getattr(rhs,params.rhsu0)
+    rhsv0 = getattr(rhs,params.rhsv0)
+    rhsu1 = getattr(rhs,params.rhsu1)
+    rhsv1 = getattr(rhs,params.rhsv1)
+
+    rhsus = [rhsu0,rhsu1]
+    rhsvs = [rhsv0,rhsv1]
 
     d2udx2 = d2udx2_2D(accuracy=2,device=device)
     d2udy2 = d2udy2_2D(accuracy=2,device=device)
@@ -58,7 +76,7 @@ if __name__=='__main__':
         tmp = torch.cat((u,u[:,:,:,:1]),dim=3)
         return torch.cat((tmp,tmp[:,:,:1]),dim=2)
         
-    def pde_du(u,mu) -> torch.Tensor:
+    def pde_du(u,mu,rhsu,rhsv) -> torch.Tensor:
         u1 = mcvter.down(u[:,:1])[:,:,:-1,:-1]
         v1 = mcvter.down(u[:,1:])[:,:,:-1,:-1]
         ux = padbcx(u1)
@@ -73,20 +91,63 @@ if __name__=='__main__':
                 padBC_rd(dt*rhsv(u1,v1,mu,dudx,dudy,d2udx2,d2udy2,vx,vy,dx,dy,dx2,dy2))
             )),dim=1)
 
-
+    
     EPOCH = int(params.epochs)+1
     BATCH_SIZE = int(params.batchsize)
 
+    
+    premodel0 = getattr(models,params.prenet0)()
+    premodel1 = getattr(models,params.prenet1)()
+    premodels = [premodel0,premodel1]
+    premodelfiles = [params.prenetfile0,params.prenetfile1]
+    for i,f in zip(premodels,premodelfiles):
+        i.load_state_dict(torch.load(f,map_location='cpu'))
+        i.eval()
 
-    ID = torch.arange(0,255,16,device=device)
-    data:torch.Tensor = torch.load(params.datafile,map_location='cpu',)\
-        [ID,params.datatimestart:params.datatimestart+params.timesteps+1].to(torch.float)
-    init = data[:,0]
-    label = data[0,1:,].detach().cpu()
-    data_u0 = data[:,:-1].reshape(-1,2,feature_size,feature_size).contiguous()
-    data_du = (data[:,1:] - data[:,:-1,]).reshape(-1,2,feature_size,feature_size).contiguous()
+    with torch.no_grad():
+        predata = [torch.load(params.predata0,map_location='cpu',),
+                torch.load(params.predata1,map_location='cpu',)]
+
+        preu0 = [predata[i][:,:-1].reshape(-1,2,feature_size,feature_size) for i in range(num_premodels)]
+        predu = [predata[i][:,1:].reshape(-1,2,feature_size,feature_size) - preu0[i] for i in range(num_premodels)]
+        predata = []
+        del predata
+        collect()
+        preinmean = [preu0[i][:-1,:,:-1,:-1].mean(dim=(0,2,3),keepdim=True) for i in range(num_premodels)]
+        preinstd = [preu0[i][:-1,:,:-1,:-1].std(dim=(0,2,3),keepdim=True) for i in range(num_premodels)]
+        preu0 = []
+        del preu0
+        collect()
+        prepdeu = [pde_du((predu[i]).to(device), muspre, rhsus[i] ,rhsvs[i]).cpu() for i in range(num_premodels)]
+        prepdedu = [(predu[i] - prepdeu[i])[:,:,:-1,:-1] for i in range(num_premodels)]
+        preoutmean = [prepdedu[i].mean(dim=(0,2,3),keepdim=True) for i in range(num_premodels)]
+        preoutstd = [prepdedu[i].std(dim=(0,2,3),keepdim=True) for i in range(num_premodels)]
+        predu = []
+        del predu
+        collect()
+        ID = torch.arange(0,255,16)
+        data:torch.Tensor = torch.load(params.datafile,map_location='cpu',)\
+            [ID,params.datatimestart:params.datatimestart+params.timesteps+1].to(torch.float)
+        
+        init = data[:,0]
+        label = data[0,1:,].detach().cpu()
+        data_u0 = data[:,:-1].reshape(-1,2,feature_size,feature_size).contiguous()
+        
+        pre_model_result = [premodels[i].cpu()((data_u0[:,:,:-1,:-1]-preinmean[i])/preinstd[i], (mus.cpu()-mus.mean().cpu())/mus.std().cpu())*preoutstd[i] + preoutmean[i]
+            for i in range(num_premodels)]
+        data_du = (data[:,1:] - data[:,:-1,]).reshape(-1,2,feature_size,feature_size).contiguous()
+        for i in range(num_premodels):
+            data_du -= padBC_rd(pre_model_result[i])
+    
+    preinmean = [preinmean[i].to(device) for i in range(num_premodels)]
+    preinstd = [preinstd[i].to(device) for i in range(num_premodels)]
+    preoutmean = [preoutmean[i].to(device) for i in range(num_premodels)]
+    preoutstd = [preoutstd[i].to(device) for i in range(num_premodels)]
+    premodels = [premodels[i].to(device) for i in range(num_premodels)]
+    prepdeu = []
+    prepdedu = []
     data=[]
-    del data
+    del prepdeu, prepdedu, data
     collect()
 
     def add_plot(p,l=None):#
@@ -100,19 +161,25 @@ if __name__=='__main__':
 
     class myset(torch.utils.data.Dataset):
         def __init__(self):
+            global data_u0,data_du
             self.u0_normd = (data_u0[:,:,:-1,:-1] - data_u0[:,:,:-1,:-1].mean(dim=(0,2,3),keepdim=True))\
                 /data_u0[:,:,:-1,:-1].std(dim=(0,2,3),keepdim=True)
             
-            pdeu = pde_du(data_u0.to(device), mus).cpu()
+            pdeu = pde_du(data_u0.to(device), mus, rhsu, rhsv).cpu()
             if params.pde:
                 self.du = (data_du - pdeu)[:,:,:-1,:-1].contiguous()
             else:
                 self.du = data_du[:,:,:-1,:-1].contiguous()
 
+            for i in range(num_premodels):
+                self.du -= pre_model_result[i]
+
+            data_du = []
             pdeu=[]
-            del pdeu
+            del pdeu, data_du
             collect()
             
+
             self.outmean = self.du.mean(dim=(0,2,3),keepdim=True)
             self.outstd = self.du.std(dim=(0,2,3),keepdim=True)
             self.du_normd = (self.du - self.outmean)/self.outstd
@@ -131,6 +198,9 @@ if __name__=='__main__':
     dataset = myset()
     inmean, instd = data_u0[:,:,:-1,:-1].mean(dim=(0,2,3),keepdim=True).to(device), \
         data_u0[:,:,:-1,:-1].std(dim=(0,2,3),keepdim=True).to(device)
+    data_u0 = []
+    del data_u0
+    collect()
     outmean, outstd = dataset.outmean.to(device), dataset.outstd.to(device)
     mumean, mustd = dataset.mumean.to(device), dataset.mustd.to(device)
 
@@ -178,9 +248,12 @@ if __name__=='__main__':
             u = init[:1].to(device)
             for _ in range(timesteps):
             
-                u = padBC_rd(model((u[:,:,:-1,:-1]-inmean)/instd,(mutest-mumean)/mustd)*outstd + outmean) + u
+                u = padBC_rd(model((u[:,:,:-1,:-1]-inmean)/instd,(mutest-mumean)/mustd)*outstd + outmean + 
+                    premodels[0]((u[:,:,:-1,:-1]-preinmean[0])/preinstd[0],(mutest-mumean)/mustd)*preoutstd[0] + preoutmean[0] +
+                    premodels[1]((u[:,:,:-1,:-1]-preinmean[1])/preinstd[1],(mutest-mumean)/mustd)*preoutstd[1] + preoutmean[1]
+                    ) + u
                 if params.pde:
-                    u += pde_du(u,mutest)
+                    u += pde_du(u,mutest,rhsu,rhsv)
                 test_re.append(u.detach())
 
             model.train()
