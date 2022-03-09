@@ -27,3 +27,6 @@ def convecu(u1,v1,mu,dudx,dudy,d2udx2,d2udy2,ux,uy,dx,dy,dx2,dy2):
 
 def convecv(u1,v1,mu,dudx,dudy,d2udx2,d2udy2,vx,vy,dx,dy,dx2,dy2):
     return -u1*dudx(vx)/dx - v1*dudy(vy)/dy
+
+def ks1d(ux4,mu,dudx,d2udx2,d4udx4,ux,dx,dx2,dx4):
+    return - d2udx2(ux)/dx2 - d4udx4(ux4)/dx4 - 0.5*dudx(ux*ux)/dx

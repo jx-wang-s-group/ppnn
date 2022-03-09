@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import torch
 from torch.utils.tensorboard import SummaryWriter
-from src.operators import diffusion1D, convection1d
+from src.operators import diffusion1D, dudx_1D
 from src.utility.utils import mesh_convertor, model_count
 from src.demo0 import mymlp
 from demo1x import gen_net, padBC_p_r, padBC_p
@@ -27,7 +27,7 @@ dx = 4/20
 dx2 = dx**2
 dt = 300*1e-4
 diffusr = diffusion1D(accuracy=2,device=device)
-convector = convection1d(accuracy=1,device=device)
+convector = dudx_1D(accuracy=1,device=device)
 mcvter = mesh_convertor(101,21)
 
     

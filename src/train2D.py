@@ -82,7 +82,7 @@ if __name__=='__main__':
     data:torch.Tensor = torch.load(params.datafile,map_location='cpu',)\
         [ID,params.datatimestart:params.datatimestart+params.timesteps+1].to(torch.float)
     init = data[:,0]
-    label = data[0,1:,].detach().cpu()
+    label = data[0,1:,].detach().cpu().numpy()
     data_u0 = data[:,:-1].reshape(-1,2,feature_size,feature_size).contiguous()
     data_du = (data[:,1:] - data[:,:-1,]).reshape(-1,2,feature_size,feature_size).contiguous()
     data=[]

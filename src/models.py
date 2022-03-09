@@ -1,3 +1,4 @@
+from turtle import forward
 import torch 
 import torch.nn as nn
 
@@ -26,20 +27,16 @@ class lblock(nn.Module):
 
 class pmlp(nn.Module):
     def __init__(self, 
-                 pdim = 1, 
                  input_size = 101, 
                  hidden_size = 24, 
-                 output_size = 99,
-                 p_h_layers = 0,
-                 h0 = 2,
                  hidden_layers = 2,
                  ) -> None:
         super().__init__()
-        self.pnet = gen_net(p_h_layers, pdim, hidden_size, hidden_size)
-        self.pdenet = gen_net(h0, input_size, hidden_size, hidden_size)
-        self.u0net = gen_net(h0, input_size, hidden_size, hidden_size)
+        self.pnet = gen_net(0, 1, hidden_size, hidden_size)
+        # self.pdenet = gen_net(h0, input_size, hidden_size, hidden_size)
+        self.u0net = gen_net(hidden_layers, input_size, hidden_size, hidden_size)
         self.convertnet = gen_net(2, 3, 1, 4)
-        self.hnet = gen_net(hidden_layers, hidden_size, output_size, hidden_size)
+        self.hnet = gen_net(hidden_layers, hidden_size, input_size, hidden_size)
 
     def forward(self, u0, p):
         return self.hnet(
@@ -49,6 +46,19 @@ class pmlp(nn.Module):
                         ),dim=-1
                     ).mean(dim=-1))
 
+
+class mlpnop(nn.Module):
+    def __init__(self, 
+                 input_size = 101, 
+                 hidden_size = 24, 
+                 p_h_layers = 0,
+                 hidden_layers = 3,) -> None:
+        super().__init__()
+        self.u0net = gen_net(hidden_layers, input_size, hidden_size, hidden_size)
+        self.hnet = gen_net(hidden_layers, hidden_size, input_size, hidden_size)
+
+    def forward(self, u0, mu):
+        return self.hnet(self.u0net(u0))
 
 class cblock(nn.Module):
     def __init__(self,hc,ksize,feature_size):

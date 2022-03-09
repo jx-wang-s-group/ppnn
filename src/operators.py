@@ -28,6 +28,14 @@ class operator_base1D(object):
                 [[[-1/560, 8/315, -1/5, 8/5, -205/72, 8/5, -1/5, 8/315, -1/560]]],device=self.device)
         ]
 
+        self.centralfilters_4th_derivative = [None,None,
+            torch.tensor([[[1., -4., 6., -4., 1.]]],device=self.device),
+            None,
+            torch.tensor([[[-1/6, 2, -13/2, 28/3, -13/2, 2, -1/6]]],device=self.device),
+            None,
+            torch.tensor([[[7/240, -2/5, 169/60, -122/15, 91/8, -122/15, 169/60, -2/5, 7/240]]],device=self.device),
+        ]
+
         self.forwardfilters:List(torch.Tensor) = [None,
             torch.tensor(
                 [[[-1., 1.]]],device=self.device),
@@ -45,9 +53,11 @@ class operator_base1D(object):
             torch.tensor(
                 [[[-1/3, 3/2, -3., 11/6]]],device=self.device),
         ]
+        
         self.schemes = {'Central':self.centralfilters,
                         'Forward':self.forwardfilters,
-                        'Backward':self.backwardfilters,}
+                        'Backward':self.backwardfilters,
+                        'Central_4th':self.centralfilters_4th_derivative,}
 
 
         
@@ -62,33 +72,22 @@ class operator_base1D(object):
 
 
 class diffusion1D(operator_base1D):
-    def __init__(self, accuracy = 2, scheme = 'Central',device='cpu') -> None:
+    def __init__(self, scheme = 'Central', accuracy = 2, device='cpu') -> None:
         super().__init__(accuracy, device)
 
         assert accuracy%2 == 0, 'diffusion operator precision must be even number'
-        assert scheme == 'Central'
+        assert scheme == 'Central' or scheme == 'Central_4th', 'scheme must be one of the following: Central, Central_4th'
         self.filters = self.schemes[scheme]
         
 
     def __call__(self, u:torch.Tensor) -> torch.Tensor:
 
-        if self.accuracy == 2:
-            return conv1d(u, self.filters[self.accuracy])
-        elif self.accuracy == 4:
-            inner = conv1d(u, self.filters[self.accuracy])
-            bc = conv1d(u, self.filters[self.accuracy-2],stride=u.shape[-1]-3)
-            return torch.cat((bc[:,:,0:1],inner,bc[:,:,1:]),dim=-1)
+        return conv1d(u, self.filters[self.accuracy])
 
-        elif self.accuracy == 6:
-            inner = conv1d(u, self.filters[self.accuracy])
-            # bc1 = conv1d(u, self.filters[self.accuracy-2],stride=u.shape[-1]-5)
-            # bc2 = conv1d(u, self.filters[self.accuracy-2],stride=u.shape[-1]-3)
-            # return torch.cat((bc2[:,:,0:1],bc1[:,:,0:1],inner,bc1[:,:,1:],bc2[:,:,1:]),dim=-1)
-            return inner
 
 
 class advection1d(operator_base1D):
-    def __init__(self, accuracy = 2, scheme='Central',device='cpu') -> None:
+    def __init__(self,scheme='Central', accuracy = 2, device='cpu') -> None:
         super().__init__(accuracy, device)
         
         self.filters = self.schemes[scheme]
@@ -97,8 +96,8 @@ class advection1d(operator_base1D):
         raise NotImplementedError
 
 
-class convection1d(operator_base1D):
-    def __init__(self, accuracy = 2, scheme='Upwind',device='cpu') -> None:
+class dudx_1D(operator_base1D):
+    def __init__(self, scheme='Upwind' ,accuracy = 2, device='cpu') -> None:
         super().__init__(accuracy, device)
         self.schemes['Upwind'] = { 
         'forward': [None,
@@ -121,28 +120,12 @@ class convection1d(operator_base1D):
         self.filter = self.schemes[scheme]
 
     def __call__(self, u:torch.Tensor) -> torch.Tensor:
-        
-        if self.accuracy == 1:
-            return (u[:,:,1:-1]<=0)*conv1d(u, self.filter['forward'][self.accuracy]) + \
-                (u[:,:,1:-1]>0)*conv1d(u, self.filter['backward'][self.accuracy])
-        elif self.accuracy == 2:
-            inner = (u[:,:,2:-2]<=0)*conv1d(u, self.filter['forward'][self.accuracy]) + \
-                (u[:,:,2:-2]>0)*conv1d(u, self.filter['backward'][self.accuracy])
-            # inner = (u[:,:,2:-2]<=0)*conv1d(u, self.filter['forward'][self.accuracy]) + \
-            #     (u[:,:,2:-2]>0)*conv1d(u, self.filter['backward'][self.accuracy])
-            # bc1 = (u[:,:,1:2]<=0)*conv1d(u, self.filter['forward'][self.accuracy-1],stride=u.shape[-1]) + \
-            #     (u[:,:,1:2]>0)*conv1d(u, self.filter['backward'][self.accuracy-1],stride=u.shape[-1])
-            # bc2 = (u[:,:,-2:-1]<=0)*conv1d(u, self.filter['forward'][self.accuracy-1],stride=u.shape[-1]) + \
-            #     (u[:,:,1:2]>0)*conv1d(u, self.filter['backward'][self.accuracy-1],stride=u.shape[-1])
-            # return torch.cat((bc1,inner,bc2),dim=-1)
-            return inner
-        elif self.accuracy == 3:
-            '''
-            only for periodic boundary condition
-            '''
-            inner = (u[:,:,3:-3]<=0)*conv1d(u, self.filter['forward'][self.accuracy]) + \
-                (u[:,:,3:-3]>0)*conv1d(u, self.filter['backward'][self.accuracy])
-            return inner
+        '''
+        only for periodic boundary condition
+        '''
+        inner = (u[:,:,self.accuracy:-self.accuracy]<=0)*conv1d(u, self.filter['forward'][self.accuracy]) + \
+            (u[:,:,self.accuracy:-self.accuracy]>0)*conv1d(u, self.filter['backward'][self.accuracy])
+        return inner
         
 
 ##################################### 2D #####################################
@@ -755,82 +738,170 @@ if __name__=='__main__':
     # endregion ####################
 
     # region ##################### 2D KS ##############################
-    torch.manual_seed(42)
+    # torch.manual_seed(42)
     
-    device = torch.device('cuda:2')
-    para = 1
-    repeat = 32 * 8
-    mu = torch.linspace(0.02,0.9,para,device=device).reshape(-1,1,1,1)
-    mu = mu.repeat(repeat,1,1,1)
-    num_para = para*repeat
+    # device = torch.device('cuda:0')
+    # para = 1
+    # repeat = 1
+    # mu = torch.linspace(0.02,0.9,para,device=device).reshape(-1,1,1,1)
+    # mu = mu.repeat(repeat,1,1,1)
+    # num_para = para*repeat
 
-    def padbcx(uinner):
-        return torch.cat((uinner[:,:,-4:-1],uinner,uinner[:,:,1:4]),dim=2)
+    # def padbcx(uinner):
+    #     return torch.cat((uinner[:,:,-4:-1],uinner,uinner[:,:,1:4]),dim=2)
 
-    def padbcy(uinner):
-        return torch.cat((uinner[:,:,:,-4:-1],uinner,uinner[:,:,:,1:4]),dim=3)
+    # def padbcy(uinner):
+    #     return torch.cat((uinner[:,:,:,-4:-1],uinner,uinner[:,:,:,1:4]),dim=3)
         
 
-    x = torch.linspace(0,2*pi,129,device=device)
-    y = torch.linspace(0,2*pi,129,device=device)
-    x,y = torch.meshgrid(x,y,indexing='ij')
-    x = x.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1,1])
-    y = y.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1,1])
-    dt = 1e-5
-    dx = 0.08
-    dy = 0.08
+    # x = torch.linspace(0,8*pi,65,device=device)
+    # y = torch.linspace(0,8*pi,65,device=device)
+    # x,y = torch.meshgrid(x,y,indexing='ij')
+    # x = x.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1,1])
+    # y = y.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1,1])
+    # dt = 1e-3
+    # dx = pi/8
+    # dy = dx
+    # dx2 = dx**2
+    # dy2 = dy**2
+    # dx4 = dx2**2
+    # dy4 = dy2**2
+    # print(dt/dx4)
+    # t=0
+    
+    # initu = torch.zeros_like(x)
+    
+    # # for k in range(-2,3):
+    # #     for l in range(-2,3):
+    # #         initu += torch.randn_like(mu)*torch.sin(k*x + l*y) + torch.randn_like(mu)*torch.cos(k*x + l*y)
+    # initu = torch.cos((x)/4) * (1+torch.sin((y)/4)) #+ torch.exp(-1*((x-4*pi)**2 + (y-4*pi)**2))
+    # # initu = (initu-initu.amin(dim=(1,2,3),keepdim=True))/(initu.amax(dim=(1,2,3),keepdim=True)-initu.amin(dim=(1,2,3),keepdim=True))  + 0.1
+    
+    # u = initu
+    
+    # resultu = []
+
+    # dudx = dudx_2D('Upwind1',accuracy=3,device=device)
+    # dudy = dudy_2D('Upwind1',accuracy=3,device=device)
+    # d2udx2 = d2udx2_2D('Central2',accuracy=6,device=device)
+    # d2udy2 = d2udy2_2D('Central2',accuracy=6,device=device)
+    # d4udx4 = d2udx2_2D('Central4',accuracy=4,device=device)
+    # d4udy4 = d2udy2_2D('Central4',accuracy=4,device=device)
+
+    # def rk4(u):
+    #     def f(u):
+    #         return - .1*d2udx2(padbcx(u))/dx2 - .1*d2udy2(padbcy(u))/dy2 - d4udx4(padbcx(u))/dx4 \
+    #             - d4udy4(padbcy(u))/dy4 - d2udy2(padbcy(d2udx2(padbcx(u)))) - d2udx2(padbcx(d2udy2(padbcy(u)))) \
+    #                 - 0.5*dudx(padbcx(u*u))/dx - 0.5*dudy(padbcy(u*u))/dy
+        
+    #     k1 = f(u)
+    #     k2 = f(u + dt*k1/2)
+    #     k3 = f(u + dt*k2/2)
+    #     k4 = f(u + dt*k3)
+    #     return u + dt*(k1 + 2*k2 + 2*k3 + k4)/6
+        
+
+    
+    # from torch.utils.tensorboard import SummaryWriter
+    # writer = SummaryWriter('/home/lxy/store/projects/dynamic/PDE_structure/2D/transfer/solver/KS10')
+    
+    # def addplot(u):
+    #     fig,ax = plt.subplots()
+    #     p=ax.pcolormesh(u[0,0])
+    #     fig.colorbar(p)
+    #     return fig
+
+    # for i in range(20001):
+        
+    #     # u = u + dt*(- d2udx2(padbcx(u))/dx2 - d2udy2(padbcy(u))/dy2 - d4udx4(padbcx(u))/dx4 \
+    #     #         - d4udy4(padbcy(u))/dy4 - u*dudx(padbcx(u))/dx - u*dudy(padbcy(u))/dy)
+    #     u = rk4(u)
+        
+        
+    #     if i%1000==0:
+    #         writer.add_figure('velocity',addplot(u.detach().cpu()),i)
+    #     if i%200==0:
+    #         # resultu.append(u.detach().cpu())
+    #         print(i)
+
+    #     t+=dt
+        
+
+    # # resultu = torch.cat(resultu,dim=1)
+    # # torch.save(resultu,'KS_2D.pth')
+
+    # endregion ####################
+
+    # region ##################### 1D KS ##############################
+    torch.manual_seed(42)
+    
+    device = torch.device('cuda:0')
+    repeat = 256
+    
+    num_para = 1*repeat
+
+    def padbc(uinner):
+        return torch.cat((uinner[:,:,-4:-1],uinner,uinner[:,:,1:4]),dim=2)
+
+        
+    x = torch.linspace(0,8*pi,129,device=device)
+    
+    x = x.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1])
+    dt = 1e-4
+    dx = pi/8
     dx2 = dx**2
-    dy2 = dy**2
     dx4 = dx2**2
-    dy4 = dy2**2
     print(dt/dx4)
     t=0
     
-    initu = torch.zeros_like(x)
-    
-    # for k in range(-2,3):
-    #     for l in range(-2,3):
-    #         initu += torch.randn_like(mu)*torch.sin(k*x + l*y) + torch.randn_like(mu)*torch.cos(k*x + l*y)
+    phi0 = torch.randn((num_para,1,1),device=device)
+    phi1 = torch.randn((num_para,1,1),device=device)
+    initu = torch.cos(x/16 + phi0)*(1+torch.sin(x/16 + phi1)) + torch.exp(-25*(x/8/pi-0.5)**2)
     # initu = (initu-initu.amin(dim=(1,2,3),keepdim=True))/(initu.amax(dim=(1,2,3),keepdim=True)-initu.amin(dim=(1,2,3),keepdim=True))  + 0.1
-    initu = torch.sin(x+y) + torch.sin(x) + torch.sin(y)
+    
     u = initu
     
     resultu = []
 
-    dudx = dudx_2D('Upwind1',accuracy=3,device=device)
-    dudy = dudy_2D('Upwind1',accuracy=3,device=device)
-    d2udx2 = d2udx2_2D('Central2',accuracy=6,device=device)
-    d2udy2 = d2udy2_2D('Central2',accuracy=6,device=device)
-    d4udx4 = d2udx2_2D('Central4',accuracy=4,device=device)
-    d4udy4 = d2udy2_2D('Central4',accuracy=4,device=device)
+    dudx = dudx_1D('Upwind',accuracy=3,device=device)
+    d2udx2 = diffusion1D('Central',accuracy=6,device=device)
+    d4udx4 = diffusion1D('Central_4th',accuracy=4,device=device)
+    
 
-    from torch.utils.tensorboard import SummaryWriter
-    writer = SummaryWriter('/home/xinyang/store/dynamic/PDE_structure/2D/transfer/solver/KS')
+    def rk4(u):
+        def f(u):
+            return - d2udx2(padbc(u))/dx2 - d4udx4(padbc(u))/dx4 - 0.5*dudx(padbc(u*u))/dx + 0.1*torch.exp(-(x - 4*pi)**2/2)
+        
+        k1 = f(u)
+        k2 = f(u + dt*k1/2)
+        k3 = f(u + dt*k2/2)
+        k4 = f(u + dt*k3)
+        return u + dt*(k1 + 2*k2 + 2*k3 + k4)/6
+    
     
     def addplot(u):
         fig,ax = plt.subplots()
-        p=ax.pcolormesh(u[0,0])
+        p=ax.pcolormesh(u)
         fig.colorbar(p)
         return fig
 
-    for i in range(20001):
+    for i in range(200001):
         
-        ux = padbcx(u)
-        uy = padbcy(u)
-    
-        u = u + dt*(- d2udx2(ux)/dx2 - d2udy2(uy)/dy2 - d4udx4(ux)/dx4 - d4udy4(uy)/dy4 - u*dudx(ux)/dx - u*dudy(uy)/dy)
+        u = rk4(u)
         
-        
-        if i%2==0:
-            writer.add_figure('velocity',addplot(u.detach().cpu()),i)
-        if i%200==0:
-            resultu.append(u.detach().cpu())
+        if i%500==0:
+            resultu.append(u.detach())
             print(i)
 
         t+=dt
         
 
-    resultu = torch.cat(resultu,dim=1)
-    torch.save(resultu,'KS_2D.pth')
-
-    # endregion ####################
+    resultu = torch.stack(resultu,dim=1)
+    from torch.utils.tensorboard import SummaryWriter
+    writer = SummaryWriter('/home/lxy/store/projects/dynamic/PDE_structure/1D/KS/solver/11')
+    for i in range(256):
+        writer.add_figure('velocity',addplot(resultu[i].cpu().squeeze()),i)
+    writer.close()
+    torch.save(resultu,'KS_1D.pth')
+    # plt.pcolormesh(resultu[0,:,0].cpu())
+    # plt.show()
