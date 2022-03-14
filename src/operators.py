@@ -146,6 +146,12 @@ class operator_base2D(object):
     def __init__(self, accuracy = 2, device='cpu') -> None:
         self.accuracy = accuracy
         self.device = device
+
+        self.centralfilters_y_1 = [None,None,
+            torch.tensor([[[[-.5, 0, 0.5]]]],device=self.device),
+            None,
+            torch.tensor([[[[1/12, -2/3, 0, 2/3, -1/12]]]],device=self.device),
+        ]
         
         self.centralfilters_y_2nd_derivative = [None,None,
             torch.tensor(
@@ -185,16 +191,19 @@ class operator_base2D(object):
                 [[[[-1/3, 3/2, -3., 11/6]]]],device=self.device),
         ]
 
+        self.centralfilters_x_1:List(torch.Tensor) = permute_y2x(self.centralfilters_y_1)
         self.centralfilters_x_2nd_derivative:List(torch.Tensor) = permute_y2x(self.centralfilters_y_2nd_derivative)
         self.centralfilters_x_4th_derivative:List(torch.Tensor) = permute_y2x(self.centralfilters_y_4th_derivative)
         self.forwardfilters_x:List(torch.Tensor) = permute_y2x(self.forwardfilters_y)
         self.backwardfilters_x:List(torch.Tensor) = permute_y2x(self.backwardfilters_y)
 
-        self.xschemes = {'Central2':self.centralfilters_x_2nd_derivative,
+        self.xschemes = {'Central1':self.centralfilters_x_1,
+                        'Central2':self.centralfilters_x_2nd_derivative,
                         'Central4':self.centralfilters_x_4th_derivative,
                         'Forward1':self.forwardfilters_x,
                         'Backward1':self.backwardfilters_x}
-        self.yschemes = {'Central2':self.centralfilters_y_2nd_derivative,
+        self.yschemes = {'Central1':self.centralfilters_y_1,
+                        'Central2':self.centralfilters_y_2nd_derivative,
                         'Central4':self.centralfilters_y_4th_derivative,
                         'Forward1':self.forwardfilters_y,
                         'Backward1':self.backwardfilters_y}

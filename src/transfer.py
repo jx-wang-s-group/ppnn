@@ -7,10 +7,10 @@ import torch
 import torch.nn as nn
 import yaml
 
-import src.models as models
+import models 
 import rhs
-from src.operators import d2udx2_2D, d2udy2_2D, dudx_2D, dudy_2D
-from src.utility.utils import mesh_convertor, model_count
+from .operators import d2udx2_2D, d2udy2_2D, dudx_2D, dudy_2D
+from .utility.utils import mesh_convertor, model_count
 
 
 if __name__ == '__main__':
