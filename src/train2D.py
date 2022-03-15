@@ -178,9 +178,10 @@ if __name__=='__main__':
             u = init[:1].to(device)
             for _ in range(timesteps):
             
-                u = padBC_rd(model((u[:,:,:-1,:-1]-inmean)/instd,(mutest-mumean)/mustd)*outstd + outmean) + u
+                u_tmp = padBC_rd(model((u[:,:,:-1,:-1]-inmean)/instd,(mutest-mumean)/mustd)*outstd + outmean) + u
                 if params.pde:
-                    u += pde_du(u,mutest)
+                    u_tmp += pde_du(u,mutest)
+                u = u_tmp
                 test_re.append(u.detach())
 
             model.train()
