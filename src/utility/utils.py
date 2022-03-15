@@ -11,20 +11,21 @@ class mesh_convertor(object):
     '''
         Class for fine/coarse mesh conversion
     '''
-    def __init__(self,fmesh_size:float, cmesh_size:float, dim=1) -> None:
+    def __init__(self,fmesh_size:float, cmesh_size:float, dim=1, align_corners=True) -> None:
         super().__init__()
         # self.down_ratio = cmesh_size/fmesh_size
         # self.up_ratio = fmesh_size/cmesh_size
+        self.align_corners = align_corners
         downmode = 'linear' if dim==1 else 'bilinear'
         self.fmesh_size = fmesh_size
-        self.down = partial(interp,mode=downmode,size=cmesh_size,align_corners=True,)
+        self.down = partial(interp,mode=downmode,size=cmesh_size,align_corners=align_corners,)
         self.up = self.up1d if dim==1 else self.upnd
         
     def up1d(self,u):
-        return interp(u.unsqueeze(1),mode='bicubic',size=self.fmesh_size,align_corners=True,)[:,:,0]
+        return interp(u.unsqueeze(1),mode='bicubic',size=self.fmesh_size,align_corners=self.align_corners,)[:,:,0]
     
     def upnd(self,u):
-        return interp(u,mode='bicubic',size=self.fmesh_size,align_corners=True,)
+        return interp(u,mode='bicubic',size=self.fmesh_size,align_corners=self.align_corners,)
         
 
 
@@ -45,3 +46,4 @@ if __name__ == '__main__':
     ax[0].legend()
     ax[1].legend()
     plt.show()
+
