@@ -1,6 +1,8 @@
 import numpy as np
+import torch
 import os
 import shutil
+import distutils
 from tqdm import tqdm
 from io import StringIO
 
@@ -139,7 +141,7 @@ FoamFile
 
 dimensions      [0 2 -2 0 0 0 0];
 
-internalField   nonuniform List<vector>\n"""+\
+internalField   nonuniform List<scalar>\n"""+\
     str(n)+'\n'+\
     '(\n'
 
@@ -192,6 +194,48 @@ def writeofsca(p, dir):
 
     with open(os.path.join(dir,'p'),'w+') as f:
         f.write(towrite)
+
+
+class OneStepRunOFCoarse(object):
+    def __init__(self, template_path, tmp_path, dt, cmesh) -> None:
+        super().__init__()
+        try:
+            distutils.dir_util.copy_tree(template_path,tmp_path)
+        except FileExistsError:
+            pass
+        self.tmp_path = tmp_path
+        self.dt = dt
+        self.cmesh = cmesh
+    
+    def __call__(self, u:torch.Tensor) -> torch.Tensor:
+        error = False
+        p = u[0,2:].reshape(1,-1).permute(1,0)
+        u = u[:,:2].reshape(2,-1).permute(1,0)
+        writeofvec(u.numpy(), os.path.join(self.tmp_path, '0'))
+        writeofsca(p.numpy(), os.path.join(self.tmp_path, '0'))
+        
+        oldpath = os.getcwd()
+        os.chdir(self.tmp_path)
+        try:
+            ofreturn=os.system('icoFoam > icoFoam.log 2>&1')# == 0
+        except:
+            error = True
+        if ofreturn != 0:
+            error = True
+        os.chdir(oldpath)
+
+        p,u = readonestep(os.path.join(self.tmp_path, str(self.dt)))
+        p = torch.from_numpy(p).float()
+        u = torch.from_numpy(u).float()
+        p = p.reshape(1,1,self.cmesh,self.cmesh)
+        u = u.permute(1,0).reshape(2,self.cmesh,self.cmesh).unsqueeze(0)
+        return torch.cat([u,p],dim=1),error
+
+
+
+
+
+
 
 if __name__=='__main__':
     # import sys
