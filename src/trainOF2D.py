@@ -68,12 +68,13 @@ if __name__=='__main__':
 
     def add_plot(p,l=None):#
         fig,ax = plt.subplots(1,2,figsize=(10,5))
-        p0=ax[0].pcolormesh(p,clim=(l.min(),l.max()))
+        p0=ax[0].pcolormesh(p,clim=(l.min(),l.max()),cmap='coolwarm')
         fig.colorbar(p0,ax=ax[0])
         if l is not None:
-            p2=ax[1].pcolormesh(l,clim=(l.min(),l.max()))
+            p2=ax[1].pcolormesh(l,clim=(l.min(),l.max()),cmap='coolwarm')
             fig.colorbar(p2,ax=ax[1])
         return fig
+
 
     class myset(torch.utils.data.Dataset):
         def __init__(self):
@@ -174,12 +175,12 @@ if __name__=='__main__':
             test_re = torch.cat(test_re,dim=0).cpu()
             
             for testtime in [0,(timesteps-1)//2, -1]:
-                writer.add_figure('u_time_{}'.format(testtime),
-                                    add_plot(test_re[testtime,0],label[testtime,0]),
-                                    i)
-                writer.add_figure('v_time_{}'.format(testtime),
-                                    add_plot(test_re[testtime,1],label[testtime,1]),
-                                    i)
+                writer.add_figure('Velocity {}'.format(testtime),
+                    add_plot(
+                    torch.sqrt(test_re[testtime,0]**2 + test_re[testtime,1]**2),
+                    torch.sqrt(label[testtime,0]**2 + label[testtime,1]**2)),
+                    i)
+                
 
             test_error = criterier(test_re[-1],label[-1])/criterier(label[-1],torch.zeros_like(label[-1]))
             test_error_u = criterier(test_re[-1,0],label[-1,0])/criterier(label[-1,0],torch.zeros_like(label[-1,0]))
