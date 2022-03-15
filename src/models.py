@@ -78,7 +78,7 @@ class cnn2d(nn.Module):
         super().__init__()
         self.net = nn.Sequential(
 
-            nn.Conv2d(3,12,6,stride=2,padding=2),
+            nn.Conv2d(2,12,6,stride=2,padding=2),
             nn.ReLU(),
             
             nn.Conv2d(12,48,6,stride=2,padding=2),
@@ -116,3 +116,22 @@ class cnn2dnop(nn.Module):
     def forward(self,u0,mu):
         return self.net(u0)
 
+class cnn2dns(nn.Module):
+    def __init__(self,cmesh) -> None:
+        super().__init__()
+        self.net = nn.Sequential(
+
+            nn.Conv2d(3,16,6,stride=2,padding=2),
+            nn.ReLU(),
+            
+            nn.Conv2d(16,64,6,stride=2,padding=2),
+            nn.ReLU(),
+            cblock(64,7,[64,cmesh,cmesh]),
+            cblock(64,7,[64,cmesh,cmesh]),
+            cblock(64,7,[64,cmesh,cmesh]),
+            nn.PixelShuffle(4),#185
+            nn.Conv2d(4,3,5,padding=2),
+        )
+
+    def forward(self,u0,mu):
+        return self.net(u0)
