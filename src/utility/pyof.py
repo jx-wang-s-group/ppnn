@@ -188,7 +188,7 @@ def writeofsca(p, dir):
     middleio = StringIO()
     np.savetxt(middleio,p,fmt='%.6g')
 
-    towrite = uheader(num_mesh) + middleio.getvalue() + utail
+    towrite = pheader(num_mesh) + middleio.getvalue() + ptail
 
     with open(os.path.join(dir,'p'),'w+') as f:
         f.write(towrite)
