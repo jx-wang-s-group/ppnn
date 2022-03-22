@@ -1,6 +1,9 @@
 from functools import partial
+from typing import Tuple
+from io import StringIO
 import torch
 from torch.nn.functional import interpolate as interp
+import numpy as np
 
 
 def model_count(model):
@@ -27,6 +30,11 @@ class mesh_convertor(object):
     def upnd(self,u):
         return interp(u,mode='bicubic',size=self.fmesh_size,align_corners=self.align_corners,)
         
+
+def numpy2string(x,format='(%.6g %.6g %.0g)'):
+    fakefile = StringIO()
+    np.savetxt(fakefile,x,fmt=format)
+    return fakefile.getvalue()
 
 
 if __name__ == '__main__':

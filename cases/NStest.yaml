@@ -4,24 +4,24 @@ device:         cuda:0
 
 
 # mesh, time
-finemeshsize:   400
-coarsemeshsize: 100
-timesteps:      85
-datatimestart:  0
-dt:             0.001
+finemeshsize:   [100,400]
+coarsemeshsize: [25,100]
+timesteps:      80
+datatimestart:  70
+dt:             0.2
 
 
 # parameters
-paralow:        0.0
-parahigh:       0.0
-num_para:       85
-repeat:         1
+para1low:       0.3
+para1high:      0.7
+para2low:       2000
+para2high:      10000
+num_para1:      9
+num_para2:      5     
 
 # data
-fudata:         /home/lxy/remote_storage/projects/PDE_preserved/OpenFoam/velocity.pth
-fpdata:         /home/lxy/remote_storage/projects/PDE_preserved/OpenFoam/pressure.pth
-cudata:         /home/lxy/remote_storage/projects/PDE_preserved/OpenFoam/velocityc.pth
-cpdata:         /home/lxy/remote_storage/projects/PDE_preserved/OpenFoam/pressurec.pth
+fdata:         /home/xinyang/storage/projects/PDE_structure/OpenFoam/pipeflow.pt
+cdata:         /home/xinyang/storage/projects/PDE_structure/OpenFoam/pipeflow_c.pt
 
 # network
 network:        cnn2dns
@@ -29,7 +29,7 @@ network:        cnn2dns
 
 # training
 epochs:         3200
-batchsize:      40
+batchsize:      512
 lr:             1.e-3
 noiseinject:    False
 
@@ -39,9 +39,9 @@ pde:            True
 
 
 # path
-tensorboarddir: /home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/test1/tb
-modelsavepath:  model_ns_PDE.pth
-template:       /home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/coarse_temp
-tmp:            /home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/tmp
+tensorboarddir: /home/xinyang/storage/projects/PDE_structure/OpenFoam/pipe/PDE
+modelsavepath:  model_pipe_PDE.pth
+template:       /home/xinyang/storage/projects/PDE_structure/OpenFoam/pipe/template
+tmp:            /home/xinyang/storage/projects/PDE_structure/OpenFoam/pipe/tmp
 
 ...

@@ -25,46 +25,37 @@ if __name__=='__main__':
     timesteps = params.timesteps
     mcvter = mesh_convertor(feature_size, cmesh, dim=2, align_corners=False)
 
+    # parameters
+    pos = torch.linspace(params.paralow1,params.parahigh1,params.num_para1,device=device)
+    Res = torch.linspace(params.paralow2,params.parahigh2,params.num_para2,device=device)
+    pos,Res = torch.meshgrid(pos,Res,indexing='ij')
+    pars = torch.stack((pos,Res),dim=-1).to(device)
+    pars = pars.reshape(-1,1,2).repeat(1,timesteps,1).reshape(-1,2)
 
+    
 
-    mu = torch.linspace(params.paralow,params.parahigh,params.num_para,device=device).reshape(-1,1)
-    mu = mu.repeat(params.repeat,1).reshape(-1,1,1,1)
-
-    # mu for pdedu in dataset
-    mus = mu.unsqueeze(1).repeat(1,timesteps,1,1,1)
-    mus = mus.reshape(-1,1,1,1,)
-
-    mutest = mu[0:1]
-
-    coarsesolver = OneStepRunOFCoarse(params.template, params.tmp, params.dt, cmesh)
+    parstest = torch.tensor([[0.5,10000]],device=device)
+    coarsesolver = OneStepRunOFCoarse(params.template, params.tmp, params.dt, 
+                        cmesh, parstest[0,0], parstest[0,1], cmesh[0])
     
 
     EPOCH = int(params.epochs)+1
     BATCH_SIZE = int(params.batchsize)
 
 
-    fudata = torch.load(params.fudata, map_location='cpu')[params.datatimestart:params.datatimestart+params.timesteps].to(torch.float)
-    fpdata = torch.load(params.fpdata, map_location='cpu')[params.datatimestart:params.datatimestart+params.timesteps].to(torch.float)
-    fdata = torch.cat((fudata,fpdata),dim=1)
-    fudata,fpdata = [],[]
-    del fudata,fpdata
-    collect()
+    fdata = torch.load(params.fdata, map_location='cpu')[:,params.datatimestart-1:params.datatimestart+params.timesteps].to(torch.float)
+    
     if params.pde:
-        cudata = torch.load(params.cudata, map_location='cpu')[params.datatimestart:params.datatimestart+params.timesteps].to(torch.float)
-        cpdata = torch.load(params.cpdata, map_location='cpu')[params.datatimestart:params.datatimestart+params.timesteps].to(torch.float)
-        cdata = torch.cat((cudata,cpdata),dim=1)
-        pdeu = mcvter.up(cdata[1:])
-        cdata,cudata,cpdata = [],[],[]
-        del cdata,cudata,cpdata
-        collect()
+        pdeu = torch.load(params.cdata, map_location='cpu')[:,params.datatimestart:params.datatimestart+params.timesteps].to(torch.float)
 
-    init = fdata[:1,]
-    label = fdata[1:,].detach()
-    data_u0 = fdata[:-1].contiguous()
-    data_du = (fdata[1:] - fdata[:-1]).contiguous()
+    init = fdata[:,:1]
+    label = fdata[:,1:].detach()
+    data_u0 = fdata[:,:-1].contiguous()
+    data_du = (fdata[:,1:] - fdata[:,:-1]).contiguous()
     fdata=[]
     del fdata
     collect()
+
 
     def add_plot(p,l=None):#
         fig,ax = plt.subplots(1,2,figsize=(10,5))
@@ -96,10 +87,10 @@ if __name__=='__main__':
             self.outstd = self.du.std(dim=(0,2,3),keepdim=True)
             self.du_normd = (self.du - self.outmean)/self.outstd
 
-            self.mu = mus.cpu()
-            self.mumean = self.mu.mean()
-            self.mustd = self.mu.std()
-            self.mu_normd = (self.mu - self.mu.mean())/self.mu.std()
+            self.pars = pars.cpu()
+            self.parsmean = self.pars.mean(dim=(0),keepdim=True)
+            self.parsstd = self.pars.std(dim=(0),keepdim=True)
+            self.pars_normd = (self.pars - self.parsmean)/self.parsstd
 
         def __getitem__(self, index):
             return self.u0_normd[index], self.du_normd[index], self.mu_normd[index]
@@ -111,7 +102,7 @@ if __name__=='__main__':
     inmean, instd = data_u0.mean(dim=(0,2,3),keepdim=True).to(device), \
         data_u0.std(dim=(0,2,3),keepdim=True).to(device)
     outmean, outstd = dataset.outmean.to(device), dataset.outstd.to(device)
-    mumean, mustd = dataset.mumean.to(device), dataset.mustd.to(device)
+    parsmean, parsstd = dataset.parsmean.to(device), dataset.parsstd.to(device)
 
 
 
@@ -156,7 +147,7 @@ if __name__=='__main__':
             u = init[:1].to(device)
             for n in range(timesteps):
             
-                u_tmp = (model((u-inmean)/instd,(mutest-mumean)/mustd)*outstd + outmean) + u
+                u_tmp = (model((u-inmean)/instd,(parstest-parsmean)/parsstd)*outstd + outmean) + u
                 if params.pde:
                     u_tmp0, error = coarsesolver(mcvter.down(u).detach().cpu())
                     if error:

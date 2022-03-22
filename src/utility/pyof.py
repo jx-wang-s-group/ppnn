@@ -2,21 +2,19 @@ import numpy as np
 import torch
 import os
 import shutil
-import distutils
-from tqdm import tqdm
-from io import StringIO
+from .utils import mesh_convertor, numpy2string
 
 def readonestep(stepdir):
 
     with open(os.path.join(stepdir,'p'), 'r') as f:
         contents = f.readlines()
-        num_mesh = int(contents[19])
-        p = np.loadtxt(contents,skiprows=21,max_rows=num_mesh)
+        num_mesh = int(contents[20])
+        p = np.loadtxt(contents,skiprows=22,max_rows=num_mesh)
    
 
     with open(os.path.join(stepdir,'U'), 'r') as f:
         contents = f.readlines()
-        content = [i[1:-3] for i in contents[21:]]
+        content = [i[1:-3] for i in contents[22:]]
         u = np.loadtxt(content,max_rows=num_mesh)
 
     return p,u
@@ -25,18 +23,22 @@ def readonestep(stepdir):
 def readall(dir):
     presults = []
     uresults = []
-    times = sorted(os.listdir(dir))
+    times = os.listdir(dir)
     os.chdir(dir)
     try:
         times.remove('0')
     except:
         pass
-    for i in tqdm(times):
+    for i in times:
         try:
             float(i)
         except:
-            continue
-        p,u=readonestep(i)
+            times.remove(i)
+    timeID = np.array(times,dtype=float)
+    timeID = timeID.argsort()
+    for t in timeID:
+        print(times[t])
+        p,u=readonestep(times[t])
         presults.append(p)
         uresults.append(u)
         # print('step: {0} read'.format(i))
@@ -47,11 +49,11 @@ def readall(dir):
 def map2coarse(src,dst,t,len_stp=0.001):
     tmpdir = 'coarse_tmp'
     oldpath = os.getcwd()
-    # try:
-    #     shutil.copytree('coarse_template',tmpdir)
-    # except FileExistsError:
-    #     pass
-    # os.chdir(dst)
+    try:
+        shutil.copytree(src, tmpdir)
+    except FileExistsError:
+        pass
+    os.chdir(dst)
     print('map field {0} ...'.format(t))
 
     assert os.system(
@@ -77,11 +79,12 @@ def uheader(n):
   =========                 |
   \\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
    \\\    /   O peration     | Website:  https://openfoam.org
-    \\\  /    A nd           | Version:  9
+    \\\  /    A nd           | Version:  8
      \\\/     M anipulation  |
 \\*---------------------------------------------------------------------------*/
 FoamFile
 {
+    version     2.0;
     format      ascii;
     class       volVectorField;
     location    "0";
@@ -96,20 +99,57 @@ internalField   nonuniform List<vector>\n"""+\
     '(\n'
 
 
-utail = """\
+def utail(pos,t,num_bcpoints=25):
+    def ubc(num_mesh,pos,t):
+        x = (np.linspace(0,num_mesh-1,num_mesh)+0.5)/num_mesh
+        u = np.exp(-50*(x-pos)*(x-pos))
+        v = np.sin(t)*np.exp(-50*(x-pos)*(x-pos))
+        return np.stack((u,v,np.zeros_like(u)),axis=1)
+    bcvalue = numpy2string(ubc(num_bcpoints,pos,t))
+    return """\
 )
 ;
 
 boundaryField
 {
-    movingWall
-    {
-        type            fixedValue;
-        value           uniform (100 0 0);
-    }
-    fixedWalls
+    walls
     {
         type            noSlip;
+    }
+    inlet
+    {
+        type            groovyBC;
+        refValue        nonuniform List<vector>\n"""+\
+    str(num_bcpoints)+'\n'+\
+    '(\n'+\
+    bcvalue+\
+    '\n)\n;'+\
+"""\
+        refGradient     uniform (0 0 0);
+        valueFraction   uniform 1;
+        value           nonuniform List<vector>\n"""+\
+    str(num_bcpoints)+'\n'+\
+    '(\n'+\
+    bcvalue+\
+    '\n)\n;'+\
+"""\
+        valueExpression "vector(exp(-50*(pos().y-{0})*(pos().y-{0})),sin(time())*pos().y/pos().y*exp(-50*(pos().y-{0})*(pos().y-{0})),0)";""".format(pos)+\
+"""
+        gradientExpression "vector(0,0,0)";
+        fractionExpression "1";
+        evaluateDuringConstruction 0;
+        cyclicSlave     0;
+        variables       "";
+        timelines       (
+);
+        lookuptables    (
+);
+        lookuptables2D  (
+);
+    }
+    outlet
+    {
+        type            zeroGradient;
     }
     frontAndBack
     {
@@ -118,8 +158,9 @@ boundaryField
 }
 
 
-// ************************************************************************* //
-"""
+// ************************************************************************* //"""
+
+
 
 def pheader(n):
     return """\
@@ -127,11 +168,12 @@ def pheader(n):
   =========                 |
   \\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
    \\\    /   O peration     | Website:  https://openfoam.org
-    \\\  /    A nd           | Version:  9
+    \\\  /    A nd           | Version:  8
      \\\/     M anipulation  |
 \\*---------------------------------------------------------------------------*/
 FoamFile
 {
+    version     2.0;
     format      ascii;
     class       volScalarField;
     location    "0";
@@ -146,19 +188,24 @@ internalField   nonuniform List<scalar>\n"""+\
     '(\n'
 
 
-ptail = """\
+ptail="""\
 )
 ;
 
 boundaryField
 {
-    movingWall
+    walls
     {
         type            zeroGradient;
     }
-    fixedWalls
+    inlet
     {
         type            zeroGradient;
+    }
+    outlet
+    {
+        type            fixedValue;
+        value           uniform 0;
     }
     frontAndBack
     {
@@ -167,17 +214,48 @@ boundaryField
 }
 
 
-// ************************************************************************* //"""
+// ************************************************************************* //
+"""
 
 
-def writeofvec(u, dir):
+def viscosity(mu):
+    return """\
+/*--------------------------------*- C++ -*----------------------------------*\\
+  =========                 |
+  \\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\\    /   O peration     | Website:  https://openfoam.org
+    \\\  /    A nd           | Version:  8
+     \\\/     M anipulation  |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      transportProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+transportModel Newtonian ;\n"""+\
+'nu              nu [0 2 -1 0 0 0 0] {0:.5g};\n\n'.format(mu)+\
+"""
+// ************************************************************************* //
+"""
+
+
+
+
+
+def writeofvec(u, dir, pos, t, inletpoints):
     
     num_mesh = u.shape[0]
-    u = np.concatenate([u,np.zeros((num_mesh,1))],axis=1)
-    middleio = StringIO()
-    np.savetxt(middleio,u,fmt='(%.6g %.6g %.0g)')
 
-    towrite = uheader(num_mesh) + middleio.getvalue() + utail
+    u = np.concatenate([u,np.zeros((num_mesh,1))],axis=1)
+
+    ustring = numpy2string(u)
+
+    towrite = uheader(num_mesh) + ustring + utail(pos,t,inletpoints)
 
     with open(os.path.join(dir,'U'),'w+') as f:
         f.write(towrite)
@@ -187,49 +265,66 @@ def writeofsca(p, dir):
 
     num_mesh = p.shape[0]
     
-    middleio = StringIO()
-    np.savetxt(middleio,p,fmt='%.6g')
+    pstring = numpy2string(p,'%.6g')
 
-    towrite = pheader(num_mesh) + middleio.getvalue() + ptail
+    towrite = pheader(num_mesh) + pstring + ptail
 
     with open(os.path.join(dir,'p'),'w+') as f:
         f.write(towrite)
 
 
+def writeofvis(mu, dir):
+    towrite = viscosity(mu)
+    with open(os.path.join(dir,'transportProperties'),'w+') as f:
+        f.write(towrite)
+
+
+
 class OneStepRunOFCoarse(object):
-    def __init__(self, template_path, tmp_path, dt, cmesh) -> None:
+    def __init__(self, template_path, tmp_path, dt, cmesh, 
+                pos:float, mu:float, num_inletpoints:float) -> None:
         super().__init__()
         try:
-            distutils.dir_util.copy_tree(template_path,tmp_path)
+            shutil.copytree(template_path,tmp_path)
         except FileExistsError:
             pass
         self.tmp_path = tmp_path
         self.dt = dt
         self.cmesh = cmesh
-    
-    def __call__(self, u:torch.Tensor) -> torch.Tensor:
+        self.pos = pos
+        self.mu = mu
+        self.num_inletpoints = num_inletpoints
+        writeofvis(self.mu, os.path.join(self.tmp_path, 'constant'))
+
+    def __call__(self, u0:torch.Tensor, t) -> torch.Tensor:
+        
         error = False
-        p = u[0,2:].reshape(1,-1).permute(1,0)
-        u = u[:,:2].reshape(2,-1).permute(1,0)
-        writeofvec(u.numpy(), os.path.join(self.tmp_path, '0'))
+        
+        p = u0[2].reshape(1,-1).permute(1,0)
+        u = u0[:2].reshape(2,-1).permute(1,0)
+        
+        writeofvec(u.numpy(), os.path.join(self.tmp_path, '0'),self.pos,t,self.num_inletpoints)
         writeofsca(p.numpy(), os.path.join(self.tmp_path, '0'))
         
+
         oldpath = os.getcwd()
         os.chdir(self.tmp_path)
         try:
-            ofreturn=os.system('icoFoam > icoFoam.log 2>&1')# == 0
+            ofreturn=os.system('icoFoam > icoFoam.log 2>&1')
         except:
             error = True
         if ofreturn != 0:
             error = True
         os.chdir(oldpath)
-
-        p,u = readonestep(os.path.join(self.tmp_path, str(self.dt)))
-        p = torch.from_numpy(p).float()
-        u = torch.from_numpy(u).float()
-        p = p.reshape(1,1,self.cmesh,self.cmesh)
-        u = u.permute(1,0).reshape(2,self.cmesh,self.cmesh).unsqueeze(0)
-        return torch.cat([u,p],dim=1),error
+        if error:
+            return float('nan')*torch.ones_like(u0), error
+        else:
+            p,u = readonestep(os.path.join(self.tmp_path, str(self.dt)))
+            p = torch.from_numpy(p).float()
+            u = torch.from_numpy(u).float()
+            p = p.reshape(1,1,self.cmesh,-1)
+            u = u.permute(1,0).reshape(2,self.cmesh,-1).unsqueeze(0)
+            return torch.cat([u,p],dim=1),error
 
 
 
@@ -238,6 +333,7 @@ class OneStepRunOFCoarse(object):
 
 
 if __name__=='__main__':
+    
     # import sys
     
     # p,u=readall(sys.argv[1])
@@ -253,10 +349,40 @@ if __name__=='__main__':
     # for t in range(1078):
     #     map2coarse('10000','./coarse3',t/1000)
     # map2coarse('10000','coarse3',0.02)
-    u = np.linspace(0,99,100)
-    # u = np.stack([u/100,-u/100],axis=-1)
-    writeofsca(u,'./')
-    
+    # u = np.linspace(0,99,100)
+    # # u = np.stack([u/100,-u/100],axis=-1)
+    # writeofsca(u,'./')
+    # readall('/home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/0.3')
+    res = [2,4,6,8,10]
+    ps = [0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.65,0.7]
+    mscvter = mesh_convertor((100,400),(25,100),dim=2,align_corners=False)
+    fdata = torch.load('/home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/pipeflow.pt')
+    result = []
+    for pos in range(len(ps)):
+        p_result = []
+        for re in range(len(res)):
+            csolver = OneStepRunOFCoarse('/home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/test',
+                '/home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/tmp',0.2,25,ps[pos],0.001/res[re]
+                ,25)
+            r_result = []
+            for t in range(150):
+                
+                u,error = csolver(mscvter.down(fdata[pos*len(res)+re,t:t+1])[0], t/5)
+                u = mscvter.up(u)
+                r_result.append(u)
+                if error:
+                    print('{0} pos,{1} Re,{2} time, error'.format(ps[pos],res[re],t/5))
+                    raise Exception('error')
+            r_result = torch.cat(r_result,dim=0)
+            p_result.append(r_result)
+            print('{0} pos,{1} Re, done'.format(ps[pos],res[re]))
+        p_result = torch.stack(p_result,dim=0)
+        result.append(p_result)
+    result = torch.stack(result,dim=0)
+    print(result.shape)
+    torch.save(result,'/home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/pipeflow_coarse.pt')
+
+                
 
     
 

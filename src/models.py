@@ -67,7 +67,7 @@ class cblock(nn.Module):
             nn.ReLU(),
             nn.Conv2d(hc,hc,ksize,padding=ksize//2),
         )
-        self.ln = nn.LayerNorm(feature_size)
+        self.ln = nn.LayerNorm([hc]+feature_size)
         
     def forward(self,x):
         return self.ln(self.net(x)) + x
@@ -83,9 +83,9 @@ class cnn2d(nn.Module):
             
             nn.Conv2d(12,48,6,stride=2,padding=2),
             nn.ReLU(),
-            cblock(48,5,[48,64,64]),
-            cblock(48,5,[48,64,64]),
-            cblock(48,5,[48,64,64]),
+            cblock(48,5,[64,64]),
+            cblock(48,5,[64,64]),
+            cblock(48,5,[64,64]),
             nn.PixelShuffle(4),#185
             nn.Conv2d(3,2,5,padding=2),
         )
@@ -106,9 +106,9 @@ class cnn2dnop(nn.Module):
             
             nn.Conv2d(12,48,6,stride=2,padding=2),
             nn.ReLU(),
-            cblock(48,5,[48,64,64]),
-            cblock(48,5,[48,64,64]),
-            cblock(48,5,[48,64,64]),
+            cblock(48,5,[64,64]),
+            cblock(48,5,[64,64]),
+            cblock(48,5,[64,64]),
             nn.PixelShuffle(4),#185
             nn.Conv2d(3,2,5,padding=2),
         )
@@ -117,21 +117,28 @@ class cnn2dnop(nn.Module):
         return self.net(u0)
 
 class cnn2dns(nn.Module):
-    def __init__(self,cmesh) -> None:
+    def __init__(self,cmesh,mesh_size) -> None:
         super().__init__()
         self.net = nn.Sequential(
 
-            nn.Conv2d(3,16,6,stride=2,padding=2),
+            nn.Conv2d(5,24,8,stride=2,padding=2),#50,200
             nn.ReLU(),
             
-            nn.Conv2d(16,64,6,stride=2,padding=2),
+            nn.Conv2d(24,96,8,stride=2,padding=2),#25,100
             nn.ReLU(),
-            cblock(64,7,[64,cmesh,cmesh]),
-            cblock(64,7,[64,cmesh,cmesh]),
-            cblock(64,7,[64,cmesh,cmesh]),
-            nn.PixelShuffle(4),#185
-            nn.Conv2d(4,3,5,padding=2),
+            cblock(96,7,[cmesh,cmesh]),
+            cblock(96,7,[cmesh,cmesh]),
+            cblock(96,7,[cmesh,cmesh]),
+            cblock(96,7,[cmesh,cmesh]),
+            nn.PixelShuffle(4),
+            nn.Conv2d(6,3,5,padding=2),
         )
+        self.cw1 = nn.Parameter(torch.randn(1,1,1,mesh_size[1])) 
+        self.rw1 = nn.Parameter(torch.randn(1,1,mesh_size[1],1))
+        self.cw2 = nn.Parameter(torch.randn(1,1,1,mesh_size[0]))
+        self.rw2 = nn.Parameter(torch.randn(1,1,mesh_size[1],1))
 
-    def forward(self,u0,mu):
-        return self.net(u0)
+    def forward(self,u0,mu1,mu2):
+        return self.net(torch.cat((u0,
+                                   mu1*self.rw1@self.cw1,
+                                   mu2*self.rw2@self.cw2,),dim=1))
