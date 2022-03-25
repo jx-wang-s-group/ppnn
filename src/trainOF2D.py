@@ -21,49 +21,61 @@ if __name__=='__main__':
     device = torch.device(params.device)
     feature_size = params.finemeshsize
     cmesh = params.coarsemeshsize
+    dt = params.dt
 
     timesteps = params.timesteps
+    begintime = (params.datatimestart + 1) * 0.2 
     mcvter = mesh_convertor(feature_size, cmesh, dim=2, align_corners=False)
 
     # parameters
-    pos = torch.linspace(params.paralow1,params.parahigh1,params.num_para1,device=device)
-    Res = torch.linspace(params.paralow2,params.parahigh2,params.num_para2,device=device)
+    pos = torch.linspace(params.para1low,params.para1high,params.num_para1,device=device)
+    Res = torch.linspace(params.para2low,params.para2high,params.num_para2,device=device)
     pos,Res = torch.meshgrid(pos,Res,indexing='ij')
     pars = torch.stack((pos,Res),dim=-1).to(device)
-    pars = pars.reshape(-1,1,2).repeat(1,timesteps,1).reshape(-1,2)
+    pars = pars.reshape(-1,1,2,1).repeat(1,timesteps,1,1).reshape(-1,2,1,1)
 
     
 
-    parstest = torch.tensor([[0.5,10000]],device=device)
-    coarsesolver = OneStepRunOFCoarse(params.template, params.tmp, params.dt, 
-                        cmesh, parstest[0,0], parstest[0,1], cmesh[0])
+    parstest = torch.tensor([[[[0.5]],[[0.0001]]]],device=device)
+    if params.pde:
+        coarsesolver = OneStepRunOFCoarse(params.template, params.tmp, params.dt, 
+                            cmesh, parstest[0,0].squeeze().item(),
+                            parstest[0,1].squeeze().item(), cmesh[0])
     
 
     EPOCH = int(params.epochs)+1
     BATCH_SIZE = int(params.batchsize)
 
 
-    fdata = torch.load(params.fdata, map_location='cpu')[:,params.datatimestart-1:params.datatimestart+params.timesteps].to(torch.float)
+    fdata = torch.load(params.fdata, map_location='cpu')[:,params.datatimestart-1:params.datatimestart+params.timesteps:2].detach().to(torch.float)
     
     if params.pde:
-        pdeu = torch.load(params.cdata, map_location='cpu')[:,params.datatimestart:params.datatimestart+params.timesteps].to(torch.float)
+        pdeu = torch.load(params.cdata, map_location='cpu')[:,params.datatimestart:params.datatimestart+params.timesteps:2].detach().to(torch.float)
+        data_du = (fdata[:,1:] - pdeu).reshape(-1,3,*feature_size).contiguous()
+        pdeu = []
+        del pdeu
+        collect()
+    else:
+        data_du = (fdata[:,1:] - fdata[:,:-1]).reshape(-1,3,*feature_size).contiguous()
 
-    init = fdata[:,:1]
-    label = fdata[:,1:].detach()
-    data_u0 = fdata[:,:-1].contiguous()
-    data_du = (fdata[:,1:] - fdata[:,:-1]).contiguous()
+    init = fdata[24,:1]
+    label = fdata[24,1:].detach()
+    data_u0 = fdata[:,:-1].reshape(-1,3,*feature_size).contiguous()
+    
+    
     fdata=[]
     del fdata
     collect()
 
 
     def add_plot(p,l=None):#
-        fig,ax = plt.subplots(1,2,figsize=(10,5))
+        fig,ax = plt.subplots(2,1,figsize=(10,5))
         p0=ax[0].pcolormesh(p,clim=(l.min(),l.max()),cmap='coolwarm')
         fig.colorbar(p0,ax=ax[0])
         if l is not None:
             p2=ax[1].pcolormesh(l,clim=(l.min(),l.max()),cmap='coolwarm')
             fig.colorbar(p2,ax=ax[1])
+        fig.tight_layout()
         return fig
 
 
@@ -72,28 +84,19 @@ if __name__=='__main__':
             self.u0_normd = (data_u0 - data_u0.mean(dim=(0,2,3),keepdim=True))\
                 /data_u0.std(dim=(0,2,3),keepdim=True)
 
-            global pdeu
-
-            if params.pde:
-                self.du = (data_du - pdeu).contiguous()
-                pdeu=[]
-                del pdeu
-                collect()
-            else:
-                self.du = data_du.contiguous()
-
+            self.du = data_du.contiguous()
             
             self.outmean = self.du.mean(dim=(0,2,3),keepdim=True)
             self.outstd = self.du.std(dim=(0,2,3),keepdim=True)
             self.du_normd = (self.du - self.outmean)/self.outstd
 
             self.pars = pars.cpu()
-            self.parsmean = self.pars.mean(dim=(0),keepdim=True)
-            self.parsstd = self.pars.std(dim=(0),keepdim=True)
+            self.parsmean = self.pars.mean(dim=(0,2,3),keepdim=True)
+            self.parsstd = self.pars.std(dim=(0,2,3),keepdim=True)
             self.pars_normd = (self.pars - self.parsmean)/self.parsstd
 
         def __getitem__(self, index):
-            return self.u0_normd[index], self.du_normd[index], self.mu_normd[index]
+            return self.u0_normd[index], self.du_normd[index], self.pars_normd[index]
 
         def __len__(self):
             return self.u0_normd.shape[0]
@@ -104,11 +107,13 @@ if __name__=='__main__':
     outmean, outstd = dataset.outmean.to(device), dataset.outstd.to(device)
     parsmean, parsstd = dataset.parsmean.to(device), dataset.parsstd.to(device)
 
+    data_u0, data_du=[],[]
+    del data_u0, data_du
+    collect()
 
+    train_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE,pin_memory=True,shuffle=True,num_workers=4)
 
-    train_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE,pin_memory=True,shuffle=True)
-
-    model = getattr(models,params.network)(cmesh).to(device)
+    model = getattr(models,params.network)(cmesh,feature_size).to(device)
 
     print('Model parameters: {}\n'.format(model_count(model)))
     optimizer = torch.optim.Adam(model.parameters(), lr=params.lr)
@@ -147,9 +152,9 @@ if __name__=='__main__':
             u = init[:1].to(device)
             for n in range(timesteps):
             
-                u_tmp = (model((u-inmean)/instd,(parstest-parsmean)/parsstd)*outstd + outmean) + u
+                u_tmp = model((u-inmean)/instd,(parstest-parsmean)/parsstd)*outstd + outmean
                 if params.pde:
-                    u_tmp0, error = coarsesolver(mcvter.down(u).detach().cpu())
+                    u_tmp0, error = coarsesolver(mcvter.down(u).detach().cpu(),begintime + n*dt)
                     if error:
                         for _ in range(timesteps-n):
                             test_re.append(float('nan')*torch.ones_like(u_tmp))
@@ -157,6 +162,9 @@ if __name__=='__main__':
                         break
                             
                     u_tmp0 = mcvter.up(u_tmp0).to(device)
+                    u_tmp += u_tmp0
+                else:
+                    u_tmp += u
 
                 u = u_tmp
                 test_re.append(u.detach())
@@ -176,6 +184,7 @@ if __name__=='__main__':
             test_error = criterier(test_re[-1],label[-1])/criterier(label[-1],torch.zeros_like(label[-1]))
             test_error_u = criterier(test_re[-1,0],label[-1,0])/criterier(label[-1,0],torch.zeros_like(label[-1,0]))
             test_error_v = criterier(test_re[-1,1],label[-1,1])/criterier(label[-1,1],torch.zeros_like(label[-1,1]))
+
 
             writer.add_scalar('U rel_error', test_error_u, i)
             writer.add_scalar('V rel_error', test_error_v, i)

@@ -1,22 +1,25 @@
 import numpy as np
 import torch
+from io import StringIO
+import pandas as pd
 import os
 import shutil
-from .utils import mesh_convertor, numpy2string
+from utils import mesh_convertor, numpy2string
+
 
 def readonestep(stepdir):
-
     with open(os.path.join(stepdir,'p'), 'r') as f:
-        contents = f.readlines()
-        num_mesh = int(contents[20])
-        p = np.loadtxt(contents,skiprows=22,max_rows=num_mesh)
-   
+        num_mesh = int(f.readlines()[20])
+    with open(os.path.join(stepdir,'p'), 'r') as f:
+        p = pd.read_csv(f, skiprows=21, nrows=num_mesh, header=0, delim_whitespace=True,dtype=np.float32).to_numpy()
+    
 
     with open(os.path.join(stepdir,'U'), 'r') as f:
         contents = f.readlines()
-        content = [i[1:-3] for i in contents[22:]]
-        u = np.loadtxt(content,max_rows=num_mesh)
 
+    content = [i[1:-3] for i in contents[22:]]
+    ff = StringIO('\n'.join(content))
+    u = pd.read_csv(ff, nrows=num_mesh, header=None, delim_whitespace=True, dtype=np.float32).to_numpy()
     return p,u
 
 
@@ -123,7 +126,7 @@ boundaryField
     str(num_bcpoints)+'\n'+\
     '(\n'+\
     bcvalue+\
-    '\n)\n;'+\
+    '\n)\n;\n'+\
 """\
         refGradient     uniform (0 0 0);
         valueFraction   uniform 1;
@@ -131,7 +134,7 @@ boundaryField
     str(num_bcpoints)+'\n'+\
     '(\n'+\
     bcvalue+\
-    '\n)\n;'+\
+    '\n)\n;\n'+\
 """\
         valueExpression "vector(exp(-50*(pos().y-{0})*(pos().y-{0})),sin(time())*pos().y/pos().y*exp(-50*(pos().y-{0})*(pos().y-{0})),0)";""".format(pos)+\
 """
@@ -300,8 +303,8 @@ class OneStepRunOFCoarse(object):
         
         error = False
         
-        p = u0[2].reshape(1,-1).permute(1,0)
-        u = u0[:2].reshape(2,-1).permute(1,0)
+        p = u0[0,2].reshape(1,-1).permute(1,0)
+        u = u0[0,:2].reshape(2,-1).permute(1,0)
         
         writeofvec(u.numpy(), os.path.join(self.tmp_path, '0'),self.pos,t,self.num_inletpoints)
         writeofsca(p.numpy(), os.path.join(self.tmp_path, '0'))
@@ -322,8 +325,8 @@ class OneStepRunOFCoarse(object):
             p,u = readonestep(os.path.join(self.tmp_path, str(self.dt)))
             p = torch.from_numpy(p).float()
             u = torch.from_numpy(u).float()
-            p = p.reshape(1,1,self.cmesh,-1)
-            u = u.permute(1,0).reshape(2,self.cmesh,-1).unsqueeze(0)
+            p = p.reshape(1,1,*self.cmesh)
+            u = u.permute(1,0).reshape(2,*self.cmesh).unsqueeze(0)
             return torch.cat([u,p],dim=1),error
 
 
@@ -356,7 +359,7 @@ if __name__=='__main__':
     res = [2,4,6,8,10]
     ps = [0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.65,0.7]
     mscvter = mesh_convertor((100,400),(25,100),dim=2,align_corners=False)
-    fdata = torch.load('/home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/pipeflow.pt')
+    fdata = torch.load('/home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/pipeflow_more.pt')
     result = []
     for pos in range(len(ps)):
         p_result = []
@@ -365,7 +368,9 @@ if __name__=='__main__':
                 '/home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/tmp',0.2,25,ps[pos],0.001/res[re]
                 ,25)
             r_result = []
-            for t in range(150):
+            if pos==0.7 and re==10:
+                continue
+            for t in range(299):
                 
                 u,error = csolver(mscvter.down(fdata[pos*len(res)+re,t:t+1])[0], t/5)
                 u = mscvter.up(u)
@@ -378,9 +383,9 @@ if __name__=='__main__':
             print('{0} pos,{1} Re, done'.format(ps[pos],res[re]))
         p_result = torch.stack(p_result,dim=0)
         result.append(p_result)
-    result = torch.stack(result,dim=0)
+    result = torch.cat(result,dim=0)
     print(result.shape)
-    torch.save(result,'/home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/pipeflow_coarse.pt')
+    torch.save(result,'/home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/pipeflow_more_coarse.pt')
 
                 
 
