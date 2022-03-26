@@ -365,14 +365,14 @@ if __name__=='__main__':
         p_result = []
         for re in range(len(res)):
             csolver = OneStepRunOFCoarse('/home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/test',
-                '/home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/tmp',0.2,25,ps[pos],0.001/res[re]
+                '/home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/tmp',0.2,(25,100),ps[pos],0.001/res[re]
                 ,25)
             r_result = []
-            if pos==0.7 and re==10:
+            if pos==8 and re==10:
                 continue
             for t in range(299):
                 
-                u,error = csolver(mscvter.down(fdata[pos*len(res)+re,t:t+1])[0], t/5)
+                u,error = csolver(mscvter.down(fdata[pos*len(res)+re,t:t+1]), t/5)
                 u = mscvter.up(u)
                 r_result.append(u)
                 if error:
