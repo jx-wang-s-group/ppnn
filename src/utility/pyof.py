@@ -282,7 +282,6 @@ def writeofvis(mu, dir):
         f.write(towrite)
 
 
-
 class OneStepRunOFCoarse(object):
     def __init__(self, template_path, tmp_path, dt, cmesh, 
                 pos:float, mu:float, num_inletpoints:float) -> None:
@@ -298,7 +297,9 @@ class OneStepRunOFCoarse(object):
         self.mu = mu
         self.num_inletpoints = num_inletpoints
         writeofvis(self.mu, os.path.join(self.tmp_path, 'constant'))
-
+        with open(os.path.join(self.tmp_path, 'system/controlDict'),'r') as f:
+            self.controlDict = f.readlines()
+            
     def __call__(self, u0:torch.Tensor, t) -> torch.Tensor:
         
         error = False
@@ -306,9 +307,23 @@ class OneStepRunOFCoarse(object):
         p = u0[0,2].reshape(1,-1).permute(1,0)
         u = u0[0,:2].reshape(2,-1).permute(1,0)
         
-        writeofvec(u.numpy(), os.path.join(self.tmp_path, '0'),self.pos,t,self.num_inletpoints)
-        writeofsca(p.numpy(), os.path.join(self.tmp_path, '0'))
+        t0s = '{0:3g}'.format(t).replace(' ','')
+        t1s = '{0:3g}'.format(t+self.dt).replace(' ','')
+
+        U0path = os.path.join(self.tmp_path, t0s)
+        U1path = os.path.join(self.tmp_path, t1s)
+
+        if not os.path.exists(U0path): os.makedirs(U0path)
+
+        writeofvec(u.numpy(), U0path, self.pos,t,self.num_inletpoints)
+        writeofsca(p.numpy(), U0path)
         
+        # write controlDict
+        self.controlDict[21] = 'startTime\t{0};\n'.format(t0s)
+        self.controlDict[25] = 'endTime\t{0};\n'.format(t1s)
+        with open(os.path.join(self.tmp_path, 'system/controlDict'),'w') as f:
+            f.writelines(self.controlDict)
+
 
         oldpath = os.getcwd()
         os.chdir(self.tmp_path)
@@ -322,7 +337,7 @@ class OneStepRunOFCoarse(object):
         if error:
             return float('nan')*torch.ones_like(u0), error
         else:
-            p,u = readonestep(os.path.join(self.tmp_path, str(self.dt)))
+            p,u = readonestep(U1path)
             p = torch.from_numpy(p).float()
             u = torch.from_numpy(u).float()
             p = p.reshape(1,1,*self.cmesh)
@@ -359,24 +374,26 @@ if __name__=='__main__':
     res = [2,4,6,8,10]
     ps = [0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.65,0.7]
     mscvter = mesh_convertor((100,400),(25,100),dim=2,align_corners=False)
-    fdata = torch.load('/home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/pipeflow_more.pt')
+    fdata = torch.load('/home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/pipefine.pt'
+        ).float()
     result = []
     for pos in range(len(ps)):
         p_result = []
         for re in range(len(res)):
             csolver = OneStepRunOFCoarse('/home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/test',
-                '/home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/tmp',0.2,(25,100),ps[pos],0.001/res[re]
+                '/home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/tmp',0.8,(25,100),ps[pos],0.001/res[re]
                 ,25)
             r_result = []
-            if pos==8 and re==10:
+            if pos==8 and re==4:
                 continue
-            for t in range(299):
-                
-                u,error = csolver(mscvter.down(fdata[pos*len(res)+re,t:t+1]), t/5)
+            phy_time = 15.2
+            for t in range(56):
+                u,error = csolver(mscvter.down(fdata[pos*len(res)+re,t:t+1]), phy_time)
+                phy_time += 0.8
                 u = mscvter.up(u)
                 r_result.append(u)
                 if error:
-                    print('{0} pos,{1} Re,{2} time, error'.format(ps[pos],res[re],t/5))
+                    print('{0} pos,{1} Re,{2} time, error'.format(ps[pos],res[re],phy_time))
                     raise Exception('error')
             r_result = torch.cat(r_result,dim=0)
             p_result.append(r_result)
