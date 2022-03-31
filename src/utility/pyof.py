@@ -4,7 +4,7 @@ from io import StringIO
 import pandas as pd
 import os
 import shutil
-from utils import mesh_convertor, numpy2string
+from .utils import mesh_convertor, numpy2string
 
 
 def readonestep(stepdir):
@@ -221,8 +221,8 @@ boundaryField
 """
 
 
-def viscosity(mu):
-    return """\
+def viscosity(mu, m=None):
+    transportProperties = """\
 /*--------------------------------*- C++ -*----------------------------------*\\
   =========                 |
   \\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
@@ -241,10 +241,12 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 transportModel Newtonian ;\n"""+\
-'nu              nu [0 2 -1 0 0 0 0] {0:.5g};\n\n'.format(mu)+\
-"""
+'nu              nu [0 2 -1 0 0 0 0] {0:.5g};\n'.format(mu)
+    if m !=None: transportProperties += 'm               [0 0 -1 0 0 0 0] {0:.3g};\n\n'.format(m)
+    transportProperties +="""
 // ************************************************************************* //
 """
+    return transportProperties
 
 
 
@@ -276,15 +278,16 @@ def writeofsca(p, dir):
         f.write(towrite)
 
 
-def writeofvis(mu, dir):
-    towrite = viscosity(mu)
+def writeofvis(mu, dir, m=None):
+    towrite = viscosity(mu, m)
     with open(os.path.join(dir,'transportProperties'),'w+') as f:
         f.write(towrite)
 
 
 class OneStepRunOFCoarse(object):
     def __init__(self, template_path, tmp_path, dt, cmesh, 
-                pos:float, mu:float, num_inletpoints:float) -> None:
+                pos:float, mu:float, num_inletpoints:float,
+                solver = 'icoFoam', m = 0.08) -> None:
         super().__init__()
         try:
             shutil.copytree(template_path,tmp_path)
@@ -296,9 +299,12 @@ class OneStepRunOFCoarse(object):
         self.pos = pos
         self.mu = mu
         self.num_inletpoints = num_inletpoints
-        writeofvis(self.mu, os.path.join(self.tmp_path, 'constant'))
+        self.solver = solver
+        if solver == 'icoFoam': m =None
+        writeofvis(self.mu, os.path.join(self.tmp_path, 'constant'), m)
         with open(os.path.join(self.tmp_path, 'system/controlDict'),'r') as f:
             self.controlDict = f.readlines()
+        
             
     def __call__(self, u0:torch.Tensor, t) -> torch.Tensor:
         
@@ -328,7 +334,7 @@ class OneStepRunOFCoarse(object):
         oldpath = os.getcwd()
         os.chdir(self.tmp_path)
         try:
-            ofreturn=os.system('icoFoam > icoFoam.log 2>&1')
+            ofreturn=os.system('{0} > Foam.log 2>&1'.format(self.solver))
         except:
             error = True
         if ofreturn != 0:
@@ -352,25 +358,6 @@ class OneStepRunOFCoarse(object):
 
 if __name__=='__main__':
     
-    # import sys
-    
-    # p,u=readall(sys.argv[1])
-
-    # np.save('pressurec.npy',p)
-    # np.save('velocityc.npy',u)
-
-    # import matplotlib.pyplot as plt
-    # plt.pcolormesh(p[2].reshape(400,400))
-    # plt.show()
-    # plt.pcolormesh(np.sqrt(u[2,:,0]**2+u[2,:,1]**2).reshape(400,400))
-    # plt.show()
-    # for t in range(1078):
-    #     map2coarse('10000','./coarse3',t/1000)
-    # map2coarse('10000','coarse3',0.02)
-    # u = np.linspace(0,99,100)
-    # # u = np.stack([u/100,-u/100],axis=-1)
-    # writeofsca(u,'./')
-    # readall('/home/lxy/store/projects/dynamic/PDE_structure/OpenFoam/0.3')
     res = [2,4,6,8,10]
     ps = [0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.65,0.7]
     mscvter = mesh_convertor((100,400),(25,100),dim=2,align_corners=False)

@@ -78,7 +78,7 @@ class cnn2d(nn.Module):
         super().__init__()
         self.net = nn.Sequential(
 
-            nn.Conv2d(2,12,6,stride=2,padding=2),
+            nn.Conv2d(3,12,6,stride=2,padding=2),
             nn.ReLU(),
             
             nn.Conv2d(12,48,6,stride=2,padding=2),
@@ -121,7 +121,7 @@ class cnn2dns(nn.Module):
         super().__init__()
         self.net = nn.Sequential(
 
-            nn.Conv2d(5,24,6,stride=2,padding=2),#50,200
+            nn.Conv2d(6,24,6,stride=2,padding=2),#50,200
             nn.ReLU(),
             
             nn.Conv2d(24,96,6,stride=2,padding=2),#25,100
@@ -138,3 +138,30 @@ class cnn2dns(nn.Module):
 
     def forward(self,u0,mu):
         return self.net(torch.cat((u0, mu*self.rw@self.cw,),dim=1))
+
+class cnn2dNSRich(nn.Module):
+    def __init__(self,cmesh,mesh_size) -> None:
+        super().__init__()
+        self.net = nn.Sequential(
+
+            nn.Conv2d(10,24,6,stride=2,padding=2),#50,200
+            nn.ReLU(),
+            
+            nn.Conv2d(24,96,6,stride=2,padding=2),#25,100
+            nn.ReLU(),
+            cblock(96,7,cmesh),
+            cblock(96,7,cmesh),
+            cblock(96,7,cmesh),
+            cblock(96,7,cmesh),
+            nn.PixelShuffle(4),
+            nn.Conv2d(6,3,5,padding=2),
+        )
+        self.cw = nn.Parameter(torch.randn(1,2,1,mesh_size[1])) 
+        self.rw = nn.Parameter(torch.randn(1,2,mesh_size[0],1))
+
+        # self.SRw = nn.Parameter(torch.randn(1,3,mesh_size[0],mesh_size[1]))
+        # self.SRb = nn.Parameter(torch.randn(1,3,mesh_size[0],mesh_size[1]))
+
+    def forward(self,u0,mu,pdeu):
+        # return self.SRw*self.net(torch.cat((u0, mu*self.rw@self.cw, pdeu),dim=1)) + self.SRb
+        return self.net(torch.cat((u0, mu*self.rw@self.cw, pdeu),dim=1))

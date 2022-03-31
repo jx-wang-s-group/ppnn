@@ -1,14 +1,14 @@
 ---
 seed:           10
-device:         cuda:1
+device:         cuda:0
 
 
 # mesh, time
 finemeshsize:   257
 coarsemeshsize: 49
-timesteps:      16
+timesteps:      100
 length:         3.2
-dt:             0.002
+dt:             0.02
 datatimestart:  0
 
 
@@ -21,7 +21,7 @@ repeat:         32
 
 
 # data
-datafile:       diffusion_2D_p.pth
+datafile:       /home/xinyang/storage/projects/PDE_structure/2Dburgers/unknown/data.pt
 
 # network
 network:        cnn2d
@@ -39,11 +39,10 @@ pde:            True
 
 
 # path
-tensorboarddir: /home/xinyang/store/dynamic/PDE_structure/2D/transfer/pretrain/diffPDE
-modelsavepath:  model_diff_PDE.pth
-
+tensorboarddir: /home/xinyang/storage/projects/PDE_structure/2Dburgers/fPDE
+modelsavepath:  /home/xinyang/storage/projects/PDE_structure/2Dburgers/model_fPDE.pth
 
 # equation
-rhsu:           diffu
-rhsv:           diffv
+rhsu:           burgers2DFu
+rhsv:           burgers2DFv
 ...

@@ -1,14 +1,14 @@
 ---
 seed:           10
-device:         cuda:3
+device:         cuda:0
 
 
 # mesh, time
 finemeshsize:   257
 coarsemeshsize: 49
-timesteps:      16
+timesteps:      100
 length:         3.2
-dt:             0.002
+dt:             0.02
 datatimestart:  0
 
 
@@ -17,11 +17,11 @@ datatimestart:  0
 parahigh:       0.09
 paralow:        0.02
 num_para:       8
-repeat:         2
+repeat:         32
 
 
 # data
-datafile:       burgers_2D_transfer.pth
+datafile:       /home/xinyang/storage/projects/PDE_structure/2Dburgers/unknown/data.pt
 
 # network
 network:        cnn2d
@@ -35,15 +35,12 @@ noiseinject:    False
 
 
 # add pde?
-pde:            True
+pde:            False
 
 
 # path
-tensorboarddir: /home/xinyang/store/dynamic/PDE_structure/2D/transfer/baseline
-modelsavepath:  model_transfer_16base_PDE.pth
+tensorboarddir: /home/xinyang/storage/projects/PDE_structure/2Dburgers/noPDE
+modelsavepath:  /home/xinyang/storage/projects/PDE_structure/2Dburgers/model_noPDE.pth
 
 
-# equation
-rhsu:           burgers2Du
-rhsv:           burgers2Dv
 ...

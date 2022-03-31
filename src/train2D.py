@@ -9,8 +9,8 @@ import yaml
 
 import models
 import rhs
-from .operators import d2udx2_2D, d2udy2_2D, dudx_2D, dudy_2D
-from .utility.utils import mesh_convertor, model_count
+from operators import d2udx2_2D, d2udy2_2D, dudx_2D, dudy_2D
+from utility.utils import mesh_convertor, model_count
 
 
 if __name__=='__main__':
@@ -20,13 +20,9 @@ if __name__=='__main__':
     torch.manual_seed(params.seed)
     device = torch.device(params.device)
     feature_size = params.finemeshsize
-    cmesh = params.coarsemeshsize
-    dx = params.length/(cmesh-1)
+    
     timesteps = params.timesteps
-    mcvter = mesh_convertor(feature_size,cmesh,dim=2)
-    dx2 = dx**2
-    dy,dy2=dx,dx2
-    dt = params.dt
+    
 
     mu = torch.linspace(params.paralow,params.parahigh,params.num_para,device=device).reshape(-1,1)
     mu = mu.repeat(params.repeat,1).reshape(-1,1,1,1)
@@ -36,16 +32,6 @@ if __name__=='__main__':
     mus = mus.reshape(-1,1,1,1,)
 
     mutest = mu[0:1]
-
-    rhsu = getattr(rhs,params.rhsu)
-    rhsv = getattr(rhs,params.rhsv)
-
-    d2udx2 = d2udx2_2D(accuracy=2,device=device)
-    d2udy2 = d2udy2_2D(accuracy=2,device=device)
-    dudx = dudx_2D(accuracy=1,device=device)
-    dudy = dudy_2D(accuracy=1,device=device)
-
-
 
     def padbcx(uinner):
         return torch.cat((uinner[:,:,-1:],uinner,uinner[:,:,:1]),dim=2)
@@ -57,39 +43,56 @@ if __name__=='__main__':
     def padBC_rd(u):
         tmp = torch.cat((u,u[:,:,:,:1]),dim=3)
         return torch.cat((tmp,tmp[:,:,:1]),dim=2)
+
+    if params.pde:
+        rhsu = getattr(rhs,params.rhsu)
+        rhsv = getattr(rhs,params.rhsv)
         
-    def pde_du(u,mu) -> torch.Tensor:
-        u1 = mcvter.down(u[:,:1])[:,:,:-1,:-1]
-        v1 = mcvter.down(u[:,1:])[:,:,:-1,:-1]
-        ux = padbcx(u1)
-        uy = padbcy(u1)
-        vx = padbcx(v1)
-        vy = padbcy(v1)
-        return torch.cat(
-            (mcvter.up(
-                padBC_rd(dt*rhsu(u1,v1,mu,dudx,dudy,d2udx2,d2udy2,ux,uy,dx,dy,dx2,dy2))
-            ),\
-            mcvter.up(
-                padBC_rd(dt*rhsv(u1,v1,mu,dudx,dudy,d2udx2,d2udy2,vx,vy,dx,dy,dx2,dy2))
-            )),dim=1)
+        d2udx2 = d2udx2_2D(accuracy=2,device=device)
+        d2udy2 = d2udy2_2D(accuracy=2,device=device)
+        dudx = dudx_2D(accuracy=1,device=device)
+        dudy = dudy_2D(accuracy=1,device=device)
+        cmesh = params.coarsemeshsize
+        dx = params.length/(cmesh-1)
+        mcvter = mesh_convertor(feature_size,cmesh,dim=2)
+        dx2 = dx**2
+        dy,dy2=dx,dx2
+        dt = params.dt
+
+        print('\nCFL: {}\n'.format(dt/dx2))
+
+        def pde_du(u,mu) -> torch.Tensor:
+            u1 = mcvter.down(u[:,:1])[:,:,:-1,:-1]
+            v1 = mcvter.down(u[:,1:])[:,:,:-1,:-1]
+            ux = padbcx(u1)
+            uy = padbcy(u1)
+            vx = padbcx(v1)
+            vy = padbcy(v1)
+            return torch.cat(
+                (mcvter.up(
+                    padBC_rd(dt*rhsu(u1,v1,mu,dudx,dudy,d2udx2,d2udy2,ux,uy,dx,dy,dx2,dy2))
+                ),\
+                mcvter.up(
+                    padBC_rd(dt*rhsv(u1,v1,mu,dudx,dudy,d2udx2,d2udy2,vx,vy,dx,dy,dx2,dy2))
+                )),dim=1)
 
 
     EPOCH = int(params.epochs)+1
     BATCH_SIZE = int(params.batchsize)
 
 
-    ID = torch.arange(0,255,16,device=device)
     data:torch.Tensor = torch.load(params.datafile,map_location='cpu',)\
-        [ID,params.datatimestart:params.datatimestart+params.timesteps+1].to(torch.float)
+        [:,params.datatimestart:params.datatimestart+params.timesteps+1].to(torch.float)
     init = data[:,0]
-    label = data[0,1:,].detach().cpu().numpy()
+    label = data[0,1:,].detach().cpu()
     data_u0 = data[:,:-1].reshape(-1,2,feature_size,feature_size).contiguous()
     data_du = (data[:,1:] - data[:,:-1,]).reshape(-1,2,feature_size,feature_size).contiguous()
     data=[]
     del data
     collect()
 
-    def add_plot(p,l=None):#
+
+    def add_plot(p,l=None):
         fig,ax = plt.subplots(1,2,figsize=(10,5))
         p0=ax[0].pcolormesh(p,clim=(l.min(),l.max()))
         fig.colorbar(p0,ax=ax[0])
@@ -98,20 +101,23 @@ if __name__=='__main__':
             fig.colorbar(p2,ax=ax[1])
         return fig
 
+
     class myset(torch.utils.data.Dataset):
         def __init__(self):
             self.u0_normd = (data_u0[:,:,:-1,:-1] - data_u0[:,:,:-1,:-1].mean(dim=(0,2,3),keepdim=True))\
                 /data_u0[:,:,:-1,:-1].std(dim=(0,2,3),keepdim=True)
             
-            pdeu = pde_du(data_u0.to(device), mus).cpu()
+            
             if params.pde:
+                pdeu = pde_du(data_u0.to(device), mus).cpu()
                 self.du = (data_du - pdeu)[:,:,:-1,:-1].contiguous()
+                pdeu=[]
+                del pdeu
+                collect()
             else:
                 self.du = data_du[:,:,:-1,:-1].contiguous()
 
-            pdeu=[]
-            del pdeu
-            collect()
+            
             
             self.outmean = self.du.mean(dim=(0,2,3),keepdim=True)
             self.outstd = self.du.std(dim=(0,2,3),keepdim=True)
@@ -134,16 +140,13 @@ if __name__=='__main__':
     outmean, outstd = dataset.outmean.to(device), dataset.outstd.to(device)
     mumean, mustd = dataset.mumean.to(device), dataset.mustd.to(device)
 
-    print('\nCFL: {}\n'.format(dt/dx2))
-
-
-    train_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE,pin_memory=True,shuffle=True)
+    train_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE,pin_memory=True,shuffle=True, num_workers=4)
 
     model = getattr(models,params.network)().to(device)
 
     print('Model parameters: {}\n'.format(model_count(model)))
     optimizer = torch.optim.Adam(model.parameters(), lr=params.lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=100, cooldown=200, verbose=True, min_lr=1e-5)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=50, cooldown=350, verbose=True, min_lr=1e-5)
     criterier = nn.MSELoss()
 
     test_error_best = 0.01
@@ -180,7 +183,7 @@ if __name__=='__main__':
             
                 u_tmp = padBC_rd(model((u[:,:,:-1,:-1]-inmean)/instd,(mutest-mumean)/mustd)*outstd + outmean) + u
                 if params.pde:
-                    u_tmp += pde_du(u,mutest)
+                    u_tmp += pde_du(u, mutest)
                 u = u_tmp
                 test_re.append(u.detach())
 

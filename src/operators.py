@@ -400,94 +400,94 @@ if __name__=='__main__':
 
 
     # region #################### 2D Burgers ###########################
-    # torch.manual_seed(10)
+    torch.manual_seed(10)
     
-    # device = torch.device('cuda:0')
-    # beta = 0.1
-    # para = 8
-    # repeat = 32
-    # mu = torch.linspace(0.02,0.09,para,device=device).reshape(-1,1)
-    # mu = mu.repeat(repeat,1)
-    # num_para = para*repeat
-    # mu = mu.reshape(-1,1,1,1)
-    # # mu = torch.tensor([[[[0.025]]]],device=device)
+    device = torch.device('cuda:0')
+    beta = 1
+    para = 8
+    repeat = 32
+    mu = torch.linspace(0.02,0.09,para,device=device).reshape(-1,1)
+    mu = mu.repeat(repeat,1)
+    num_para = para*repeat
+    mu = mu.reshape(-1,1,1,1)
+    # mu = torch.tensor([[[[0.025]]]],device=device)
 
-    # def padbcx(uinner):
-    #     return torch.cat((uinner[:,:,-4:-1],uinner,uinner[:,:,1:4]),dim=2)
+    def padbcx(uinner):
+        return torch.cat((uinner[:,:,-4:-1],uinner,uinner[:,:,1:4]),dim=2)
 
-    # def padbcy(uinner):
-    #     return torch.cat((uinner[:,:,:,-4:-1],uinner,uinner[:,:,:,1:4]),dim=3)
+    def padbcy(uinner):
+        return torch.cat((uinner[:,:,:,-4:-1],uinner,uinner[:,:,:,1:4]),dim=3)
         
 
-    # x = torch.linspace(0,2*pi,257,device=device)
-    # y = torch.linspace(0,2*pi,257,device=device)
-    # x,y = torch.meshgrid(x,y,indexing='ij')
-    # x = x.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1,1])
-    # y = y.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1,1])
-    # dt = 1e-4
-    # dx = 0.0125
-    # dy = 0.0125
-    # dx2 = dx**2
-    # dy2 = dy**2
+    x = torch.linspace(0,2*pi,257,device=device)
+    y = torch.linspace(0,2*pi,257,device=device)
+    x,y = torch.meshgrid(x,y,indexing='ij')
+    x = x.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1,1])
+    y = y.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1,1])
+    dt = 1e-4
+    dx = 0.0125
+    dy = 0.0125
+    dx2 = dx**2
+    dy2 = dy**2
 
-    # t=0
+    t=0
     
-    # initu = torch.zeros_like(x)
-    # initv = torch.zeros_like(y)
-    # for k in range(-4,5):
-    #     for l in range(-4,5):
-    #         initu += torch.randn_like(mu)*torch.sin(k*x + l*y) + torch.randn_like(mu)*torch.cos(k*x + l*y)
-    #         initv += torch.randn_like(mu)*torch.sin(k*x + l*y) + torch.randn_like(mu)*torch.cos(k*x + l*y)
-    # initu = (initu-initu.amin(dim=(1,2,3),keepdim=True))/(initu.amax(dim=(1,2,3),keepdim=True)-initu.amin(dim=(1,2,3),keepdim=True))  + 0.1
-    # initv = (initv-initv.amin(dim=(1,2,3),keepdim=True))/(initv.amax(dim=(1,2,3),keepdim=True)-initv.amin(dim=(1,2,3),keepdim=True))  + 0.1
-    # u = initu
-    # v = initv
+    initu = torch.zeros_like(x)
+    initv = torch.zeros_like(y)
+    for k in range(-4,5):
+        for l in range(-4,5):
+            initu += torch.randn_like(mu)*torch.sin(k*x + l*y) + torch.randn_like(mu)*torch.cos(k*x + l*y)
+            initv += torch.randn_like(mu)*torch.sin(k*x + l*y) + torch.randn_like(mu)*torch.cos(k*x + l*y)
+    initu = (initu-initu.amin(dim=(1,2,3),keepdim=True))/(initu.amax(dim=(1,2,3),keepdim=True)-initu.amin(dim=(1,2,3),keepdim=True))  + 0.1
+    initv = (initv-initv.amin(dim=(1,2,3),keepdim=True))/(initv.amax(dim=(1,2,3),keepdim=True)-initv.amin(dim=(1,2,3),keepdim=True))  + 0.1
+    u = initu
+    v = initv
     
-    # resultu = []
-    # resultv = []
+    resultu = []
+    resultv = []
 
-    # dudx = dudx_2D('Upwind1',accuracy=3,device=device)
-    # dudy = dudy_2D('Upwind1',accuracy=3,device=device)
-    # # dudxc = dudx_2D('Central',accuracy=6)
-    # # dudyc = dudy_2D('Central',accuracy=6)
-    # d2udx2 = d2udx2_2D('Central2',accuracy=6,device=device)
-    # d2udy2 = d2udy2_2D('Central2',accuracy=6,device=device)
+    dudx = dudx_2D('Upwind1',accuracy=3,device=device)
+    dudy = dudy_2D('Upwind1',accuracy=3,device=device)
+    # dudxc = dudx_2D('Central',accuracy=6)
+    # dudyc = dudy_2D('Central',accuracy=6)
+    d2udx2 = d2udx2_2D('Central2',accuracy=6,device=device)
+    d2udy2 = d2udy2_2D('Central2',accuracy=6,device=device)
 
-    # # from torch.utils.tensorboard import SummaryWriter
-    # # writer = SummaryWriter('/home/lxy/store/projects/dynamic/PDE_structure/2D/burgers/solver/0.02')
+    # from torch.utils.tensorboard import SummaryWriter
+    # writer = SummaryWriter('/home/lxy/store/projects/dynamic/PDE_structure/2D/burgers/solver/0.02')
     
-    # # def addplot(u,v):
-    # #     fig,ax = plt.subplots(subplot_kw={"projection": "3d"})
-    # #     ax.plot_surface(x.squeeze(),y.squeeze(),torch.sqrt(u.squeeze() + v.squeeze())**2,cmap=cm.coolwarm)
-    # #     ax.set_zlim(1,4)
-    # #     return fig
+    # def addplot(u,v):
+    #     fig,ax = plt.subplots(subplot_kw={"projection": "3d"})
+    #     ax.plot_surface(x.squeeze(),y.squeeze(),torch.sqrt(u.squeeze() + v.squeeze())**2,cmap=cm.coolwarm)
+    #     ax.set_zlim(1,4)
+    #     return fig
 
-    # for i in range(3201):
+    for i in range(20001):
         
-    #     ux = padbcx(u)
-    #     uy = padbcy(u)
-    #     vx = padbcx(v)
-    #     vy = padbcy(v)
+        ux = padbcx(u)
+        uy = padbcy(u)
+        vx = padbcx(v)
+        vy = padbcy(v)
         
-    #     uv = u*u+v*v
-    #     u = u + dt*(-u*dudx(ux)/dx - v*dudy(uy)/dy + mu*(d2udx2(ux)/dx2+d2udy2(uy)/dy2) + beta*((1-uv)*u+uv*v))
-    #     v = v + dt*(-u*dudx(vx)/dx - v*dudy(vy)/dy + mu*(d2udx2(vx)/dx2+d2udy2(vy)/dy2) + beta*(-uv*u+(1-uv)*v))
+        uv = u*u+v*v
+        u = u + dt*(-u*dudx(ux)/dx - v*dudy(uy)/dy + mu*(d2udx2(ux)/dx2+d2udy2(uy)/dy2) + beta*((1-uv)*u+uv*v))
+        v = v + dt*(-u*dudx(vx)/dx - v*dudy(vy)/dy + mu*(d2udx2(vx)/dx2+d2udy2(vy)/dy2) + beta*(-uv*u+(1-uv)*v))
         
-    #     # if i%100==0:
-    #     #     writer.add_figure('velocity',addplot(u,v),i)
-    #     if i%200==0:
-    #         resultu.append(u.detach().cpu())
-    #         resultv.append(v.detach().cpu())
-    #         print(i)
+        # if i%100==0:
+        #     writer.add_figure('velocity',addplot(u,v),i)
+        if i%200==0:
+            resultu.append(u.detach().cpu())
+            resultv.append(v.detach().cpu())
+            print(i)
 
-    #     t+=dt
+        t+=dt
         
 
-    # resultu = torch.cat(resultu,dim=1)
-    # resultv = torch.cat(resultv,dim=1)
-    # torch.save(torch.stack((resultu,resultv),dim=2),'burgers_2D_transfer.pth')
-    # # torch.save(resultu,'burgers_p_2Du.pth')
-    # # torch.save(resultv,'burgers_p_2Dv.pth')
+    resultu = torch.cat(resultu,dim=1)
+    resultv = torch.cat(resultv,dim=1)
+    torch.save(torch.stack((resultu,resultv),dim=2),'burgers_2D_transfer.pth')
+    # torch.save(resultu,'burgers_p_2Du.pth')
+    # torch.save(resultv,'burgers_p_2Dv.pth')
     # endregion
 
     # region ################## RD Equation ##############################
@@ -914,3 +914,4 @@ if __name__=='__main__':
     torch.save(resultu,'KS_1D.pth')
     # plt.pcolormesh(resultu[0,:,0].cpu())
     # plt.show()
+    # endregion ####################
