@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
+import os
 import yaml
 
 import models
@@ -20,12 +21,17 @@ if __name__=='__main__':
     torch.manual_seed(params.seed)
     device = torch.device(params.device)
     feature_size = params.finemeshsize
-    cmesh = params.coarsemeshsize
-    dt = params.dt
 
     timesteps = params.timesteps
-    begintime = params.datatimestart
-    mcvter = mesh_convertor(feature_size, cmesh, dim=2, align_corners=False)
+    
+    cmesh = params.coarsemeshsize
+    modelparams = [cmesh,feature_size]
+
+    enrich,datachannel = True, 4
+    try:
+        modelparams += [params.inchannels,]
+    except AttributeError:
+        enrich,datachannel = False, 3
 
     # parameters
     pos = torch.linspace(params.para1low,params.para1high,params.num_para1,device=device)
@@ -33,38 +39,43 @@ if __name__=='__main__':
     pos,Res = torch.meshgrid(pos,Res,indexing='ij')
     pars = torch.stack((pos,Res),dim=-1).to(device)
     pars = pars.reshape(-1,1,2,1).repeat(1,timesteps,1,1).reshape(-1,2,1,1)
-
     
 
-    parstest = torch.tensor([[[[0.5]],[[0.0001]]]],device=device)
+    parstest = torch.tensor([[[[0.5]],[[10000]]]],device=device)
     if params.pde:
+        begintime = params.datatimestart
+        mcvter = mesh_convertor(feature_size, cmesh, dim=2, align_corners=False)
         coarsesolver = OneStepRunOFCoarse(params.template, params.tmp, params.dt, 
                             cmesh, parstest[0,0].squeeze().item(),
-                            parstest[0,1].squeeze().item(), cmesh[0],
+                            1/parstest[0,1].squeeze().item(), cmesh[0],
                             params.solver)
     
 
-    EPOCH = int(params.epochs)+1
+    EPOCH = int(params.epochs) + 1
     BATCH_SIZE = int(params.batchsize)
 
 
     fdata = torch.load(params.fdata, map_location='cpu').detach().to(torch.float)
-    fdata = torch.cat((fdata,torch.sqrt(fdata[:,:,0:1]**2 + fdata[:,:,1:2]**2)),dim=2)
+    if enrich: fdata = torch.cat(
+        (fdata,torch.sqrt(fdata[:,:,0:1]**2 + fdata[:,:,1:2]**2)),dim=2)
     
     if params.pde:
         pdeu = torch.load(params.cdata, map_location='cpu').detach().to(torch.float)
-        pdeu = torch.cat((pdeu,torch.sqrt(pdeu[:,:,0:1]**2 + pdeu[:,:,1:2]**2)),dim=2)
-        data_du = (fdata[:,1:,:-1] - pdeu[:,:,:-1]).reshape(-1,3,*feature_size).contiguous()
-        pdeu = pdeu.reshape(-1,4,*feature_size).contiguous()
-        # pdeu = []
-        # del pdeu
-        # collect()
+        if enrich: 
+            pdeu = torch.cat((pdeu,
+                              torch.sqrt(pdeu[:,:,0:1]**2 
+                                + pdeu[:,:,1:2]**2)),
+                            dim=2)
+        data_du = (fdata[:,1:,:3] - pdeu[:,:,:3]).reshape(-1, 3,*feature_size).contiguous()
+        pdeu = pdeu.reshape(-1, datachannel,*feature_size).contiguous()
+        
     else:
-        data_du = (fdata[:,1:,:-1] - fdata[:,:-1,:-1]).reshape(-1,3,*feature_size).contiguous()
-
-    init = fdata[24,:1,:-1]
-    label = fdata[24,1:,:-1].detach()
-    data_u0 = fdata[:,:-1].reshape(-1,4,*feature_size).contiguous()
+        data_du = (fdata[:,1:,:3] - fdata[:,:-1,:3])\
+            .reshape(-1, 3,*feature_size).contiguous()
+    
+    init = fdata[24,:1,:3]
+    label = fdata[24,1:,:3].detach()
+    data_u0 = fdata[:,:-1].reshape(-1, datachannel, *feature_size).contiguous()
     
     
     fdata=[]
@@ -118,9 +129,20 @@ if __name__=='__main__':
     outmean, outstd = dataset.outmean.to(device), dataset.outstd.to(device)
     parsmean, parsstd = dataset.parsmean.to(device), dataset.parsstd.to(device)
 
+    from torch.utils.tensorboard import SummaryWriter
+    writer = SummaryWriter(params.tensorboarddir)
+
+    torch.save(inmean, os.path.join(params.tensorboarddir,'inmean.pt'))
+    torch.save(instd, os.path.join(params.tensorboarddir,'instd.pt'))
+    torch.save(outmean, os.path.join(params.tensorboarddir,'outmean.pt'))
+    torch.save(outstd, os.path.join(params.tensorboarddir,'outstd.pt'))
+    torch.save(parsmean, os.path.join(params.tensorboarddir,'parsmean.pt'))
+    torch.save(parsstd, os.path.join(params.tensorboarddir,'parsstd.pt'))
+
     if params.pde:
         pdemean, pdestd = dataset.pdemean.to(device), dataset.pdestd.to(device)
-
+        torch.save(pdemean, os.path.join(params.tensorboarddir,'pdemean.pt'))
+        torch.save(pdestd, os.path.join(params.tensorboarddir,'pdestd.pt'))
         pdeu = []
         del pdeu
         collect()
@@ -131,16 +153,16 @@ if __name__=='__main__':
 
     train_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE,pin_memory=True,shuffle=True,num_workers=4)
 
-    model = getattr(models,params.network)(cmesh,feature_size).to(device)
+    
+    model = getattr(models,params.network)(*modelparams).to(device)
 
     print('Model parameters: {}\n'.format(model_count(model)))
     optimizer = torch.optim.Adam(model.parameters(), lr=params.lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=50, cooldown=350, verbose=True, min_lr=1e-5)
     criterier = nn.MSELoss()
 
-    test_error_best = 0.5
-    from torch.utils.tensorboard import SummaryWriter
-    writer = SummaryWriter(params.tensorboarddir)
+    test_error_best = 1#0.5
+    
     for i in range(EPOCH):
         loshis = 0
         counter= 0
@@ -181,30 +203,38 @@ if __name__=='__main__':
             u = init[:1].to(device)
             for n in range(timesteps):
                 
-                u = torch.cat((u,torch.sqrt(u[:,0:1]**2+u[:,1:2]**2)),dim=1)
+                if enrich:
+                    u = torch.cat((u,torch.sqrt(u[:,0:1]**2+u[:,1:2]**2)),dim=1)
                
                 if params.pde:
-                    u_tmp0, error = coarsesolver(mcvter.down(u[:,:-1]).detach().cpu(),begintime + n*dt)
+                    u_coarse, error = coarsesolver(mcvter.down(u).detach().cpu(), begintime + n*params.dt)
                     if error:
                         for _ in range(timesteps-n):
-                            test_re.append(float('nan')*torch.ones_like(u_tmp))
+                            test_re.append(float('nan')*torch.ones_like(du))
                         print('OpenFoam solver failed at step {0}!\n'.format(n))
                         break
                             
-                    u_tmp0 = mcvter.up(u_tmp0).to(device)
-                    u_tmp = model(
+                    u_coarse = mcvter.up(u_coarse).to(device)
+                    
+                    if enrich: 
+                        u_coarse = torch.cat((u_coarse,torch.sqrt(u_coarse[:,0:1]**2+u_coarse[:,1:2]**2)),dim=1)
+                    
+                    
+                    du = model(
                             (u-inmean)/instd,
                             (parstest-parsmean)/parsstd,
-                            (torch.cat((u_tmp0,torch.sqrt(u_tmp0[:,0:1]**2+u_tmp0[:,1:2]**2)),dim=1)-pdemean)/pdestd
+                            (u_coarse-pdemean)/pdestd,
                         )*outstd + outmean 
-                    u_tmp += u_tmp0
+                    
+                    u = du + u_coarse[:,:3]
+
                 else:
-                    u_tmp = model(
+                    u = model(
                             (u-inmean)/instd,
                             (parstest-parsmean)/parsstd,
-                        )*outstd + outmean + u[:,:-1]
+                        )*outstd + outmean + u[:,:3]
 
-                u = u_tmp
+                
                 test_re.append(u.detach())
             
             model.train()

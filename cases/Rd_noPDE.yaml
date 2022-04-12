@@ -21,26 +21,26 @@ repeat:         16
 
 
 # data
-datafile:       RD_p.pth
+datafile:       /home/xinyang/storage/projects/PDE_structure/RD/RD.pt
 
 # network
 network:        cnn2d
 
 
 # training
-epochs:         3200
+epochs:         1000
 batchsize:      800
 lr:             1.e-3
 noiseinject:    False
 
 
 # add pde?
-pde:            True
+pde:            False
 
 
 # path
-tensorboarddir: /home/xinyang/store/dynamic/PDE_structure/2D/RD/PDE
-modelsavepath:  model_rd_p_PDE.pth
+tensorboarddir: /home/xinyang/storage/projects/PDE_structure/RD/noPDE
+modelsavepath:  /home/xinyang/storage/projects/PDE_structure/RD/model_noPDE.pth
 
 
 # equation

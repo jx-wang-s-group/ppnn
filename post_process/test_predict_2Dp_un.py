@@ -4,7 +4,7 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 from src.operators import d2udx2_2D, d2udy2_2D, dudx_2D, dudy_2D
 from src.utility.utils import mesh_convertor
-from demo2un import mycnn
+from src.models import cnn2d
 
 np.random.seed(10)
 torch.manual_seed(10)

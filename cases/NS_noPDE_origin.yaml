@@ -1,14 +1,13 @@
 ---
 seed:           10
-device:         cuda:0
+device:         cuda:3
 
 
 # mesh, time
 finemeshsize:   [100,400]
 coarsemeshsize: [25,100]
-timesteps:      56
-datatimestart:  75
-dt:             0.8
+timesteps:      73
+datatimestart:  1.6
 
 
 # parameters
@@ -20,8 +19,8 @@ num_para1:      9
 num_para2:      5     
 
 # data
-fdata:         /home/xinyang/storage/projects/PDE_structure/NS/pipefine.pt
-cdata:         /home/xinyang/storage/projects/PDE_structure/NS/pipecoarsef.pt
+fdata:         /home/xinyang/storage/projects/PDE_structure/NS/origin/pipefine_origin_long.pt
+cdata:         /home/xinyang/storage/projects/PDE_structure/NS/origin/pipecoarse.pt
 
 # network
 network:        cnn2dns
@@ -39,5 +38,7 @@ pde:            False
 
 
 # path
-tensorboarddir: /home/xinyang/storage/projects/PDE_structure/NS/noPDE
-modelsavepath:  /home/xinyang/storage/projects/PDE_structure/NS/model_noPDE.pth
+tensorboarddir: /home/xinyang/storage/projects/PDE_structure/NS/origin/noPDE
+modelsavepath:  /home/xinyang/storage/projects/PDE_structure/NS/origin/model_noPDE.pth
+
+...

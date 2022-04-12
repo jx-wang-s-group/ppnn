@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 from gc import collect
+import os
 import sys
 import matplotlib.pyplot as plt
 import numpy as np
@@ -31,8 +32,8 @@ if __name__=='__main__':
     mus = mu.unsqueeze(1).repeat(1,timesteps,1,1,1)
     mus = mus.reshape(-1,1,1,1,)
 
-    mutest = mu[0:1]
-
+    mutest = mu[0:-1:16]
+    testIDs = torch.linspace(0,params.repeat*params.num_para-1, 2*params.num_para, device=device,dtype = torch.long)
     def padbcx(uinner):
         return torch.cat((uinner[:,:,-1:],uinner,uinner[:,:,:1]),dim=2)
 
@@ -81,16 +82,19 @@ if __name__=='__main__':
     BATCH_SIZE = int(params.batchsize)
 
 
-    data:torch.Tensor = torch.load(params.datafile,map_location='cpu',)\
-        [:,params.datatimestart:params.datatimestart+params.timesteps+1].to(torch.float)
-    init = data[:,0]
-    label = data[0,1:,].detach().cpu()
-    data_u0 = data[:,:-1].reshape(-1,2,feature_size,feature_size).contiguous()
-    data_du = (data[:,1:] - data[:,:-1,]).reshape(-1,2,feature_size,feature_size).contiguous()
-    data=[]
-    del data
+    fdata:torch.Tensor = torch.load(params.datafile,map_location='cpu',)\
+        [:,params.datatimestart:params.datatimestart+params.timesteps+1].detach().to(torch.float)
+    init = fdata[testIDs,0]
+    label = fdata[testIDs,1:,].detach().cpu()
+    data_u0 = fdata[:,:-1].reshape(-1,2,feature_size,feature_size).contiguous()
+    data_du = (fdata[:,1:] - fdata[:,:-1,]).reshape(-1,2,feature_size,feature_size).contiguous()
+    
+    fdata=[]    
+    del fdata
     collect()
 
+    def magnitude(x):
+        return torch.sqrt(torch.sum(x**2,dim=-3))
 
     def add_plot(p,l=None):
         fig,ax = plt.subplots(1,2,figsize=(10,5))
@@ -104,18 +108,34 @@ if __name__=='__main__':
 
     class myset(torch.utils.data.Dataset):
         def __init__(self):
-            self.u0_normd = (data_u0[:,:,:-1,:-1] - data_u0[:,:,:-1,:-1].mean(dim=(0,2,3),keepdim=True))\
-                /data_u0[:,:,:-1,:-1].std(dim=(0,2,3),keepdim=True)
+            global data_u0, data_du
+
+            self.inmean = data_u0[:,:,:-1,:-1].mean(dim=(0,2,3),keepdim=True)
+            self.instd = data_u0[:,:,:-1,:-1].std(dim=(0,2,3),keepdim=True)
+            self.u0_normd = (data_u0[:,:,:-1,:-1] - self.inmean)/self.instd
             
             
             if params.pde:
                 pdeu = pde_du(data_u0.to(device), mus).cpu()
+                
+                del data_u0
+                collect()
+
+                self.pdemean = pdeu.mean(dim=(0,2,3),keepdim=True)
+                self.pdestd = pdeu.std(dim=(0,2,3),keepdim=True)
+                self.pdeu_normd = (pdeu[:,:,:-1,:-1].contiguous() - self.pdemean)/self.pdestd
                 self.du = (data_du - pdeu)[:,:,:-1,:-1].contiguous()
-                pdeu=[]
+
                 del pdeu
                 collect()
+                del data_du
+                collect()
             else:
+                del data_u0
+                collect()
                 self.du = data_du[:,:,:-1,:-1].contiguous()
+                del data_du
+                collect()
 
             
             
@@ -129,40 +149,67 @@ if __name__=='__main__':
             self.mu_normd = (self.mu - self.mu.mean())/self.mu.std()
 
         def __getitem__(self, index):
-            return self.u0_normd[index], self.du_normd[index], self.mu_normd[index]
+            if params.pde:
+                return self.u0_normd[index], self.du_normd[index], self.mu_normd[index], self.pdeu_normd[index]
+            else:
+                return self.u0_normd[index], self.du_normd[index], self.mu_normd[index]
 
         def __len__(self):
             return self.u0_normd.shape[0]
 
     dataset = myset()
-    inmean, instd = data_u0[:,:,:-1,:-1].mean(dim=(0,2,3),keepdim=True).to(device), \
-        data_u0[:,:,:-1,:-1].std(dim=(0,2,3),keepdim=True).to(device)
+    inmean, instd = dataset.inmean.to(device), dataset.instd.to(device)
     outmean, outstd = dataset.outmean.to(device), dataset.outstd.to(device)
     mumean, mustd = dataset.mumean.to(device), dataset.mustd.to(device)
 
-    train_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE,pin_memory=True,shuffle=True, num_workers=4)
+    from torch.utils.tensorboard import SummaryWriter
+    writer = SummaryWriter(params.tensorboarddir)
+
+    torch.save(inmean, os.path.join(params.tensorboarddir,'inmean.pt'))
+    torch.save(instd, os.path.join(params.tensorboarddir,'instd.pt'))
+    torch.save(outmean, os.path.join(params.tensorboarddir,'outmean.pt'))
+    torch.save(outstd, os.path.join(params.tensorboarddir,'outstd.pt'))
+    torch.save(mumean, os.path.join(params.tensorboarddir,'parsmean.pt'))
+    torch.save(mustd, os.path.join(params.tensorboarddir,'parsstd.pt'))
+
+    if params.pde:
+        pdemean, pdestd = dataset.pdemean.to(device), dataset.pdestd.to(device)
+        torch.save(pdemean, os.path.join(params.tensorboarddir,'pdemean.pt'))
+        torch.save(pdestd, os.path.join(params.tensorboarddir,'pdestd.pt'))
+
+
+    train_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE,pin_memory=True,shuffle=True, num_workers=8)
 
     model = getattr(models,params.network)().to(device)
 
     print('Model parameters: {}\n'.format(model_count(model)))
     optimizer = torch.optim.Adam(model.parameters(), lr=params.lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=50, cooldown=350, verbose=True, min_lr=1e-5)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=50, cooldown=250, verbose=True, min_lr=1e-5)
     criterier = nn.MSELoss()
 
-    test_error_best = 0.01
-    from torch.utils.tensorboard import SummaryWriter
-    writer = SummaryWriter(params.tensorboarddir)
+    test_error_best = 0.1
+    # from torch.utils.tensorboard import SummaryWriter
+    # writer = SummaryWriter(params.tensorboarddir)
     for i in range(EPOCH):
         loshis = 0
         counter= 0
         
-        for u0,du,mu in train_loader:
-
+        for data in train_loader:
+            
+            if params.pde:
+                u0, du, mu, pdeu = data
+                u0,du,mu,pdeu = u0.to(device),du.to(device),mu.to(device),pdeu.to(device)
+            else:
+                u0, du, mu = data
+                u0,du,mu = u0.to(device),du.to(device),mu.to(device)
+                
             if params.noiseinject:
                 u0 += 0.05*u0.std()*torch.randn_like(u0)
 
-            u0,du,mu = u0.to(device),du.to(device),mu.to(device)
-            u_p = model(u0,mu)
+            if params.pde:
+                u_p = model(u0,mu,pdeu)
+            else:
+                u_p = model(u0,mu)
             loss = criterier(u_p, du)
             optimizer.zero_grad()
             loss.backward()
@@ -178,33 +225,49 @@ if __name__=='__main__':
 
             model.eval()
             test_re = []
-            u = init[:1].to(device)
+            u = init.to(device)
             for _ in range(timesteps):
             
-                u_tmp = padBC_rd(model((u[:,:,:-1,:-1]-inmean)/instd,(mutest-mumean)/mustd)*outstd + outmean) + u
-                if params.pde:
-                    u_tmp += pde_du(u, mutest)
+                
+                if params.pde:    
+                    pdeuu = pde_du(u, mutest)
+                    u_tmp = padBC_rd(model((u[:,:,:-1,:-1]-inmean)/instd,
+                                           (mutest-mumean)/mustd, 
+                                           (pdeuu[:,:,:-1,:-1]-pdemean)/pdestd)*outstd + outmean)\
+                            + u + pdeuu
+                else:
+                    u_tmp = padBC_rd(model((u[:,:,:-1,:-1]-inmean)/instd,
+                                           (mutest-mumean)/mustd)*outstd + outmean)\
+                            + u
+
                 u = u_tmp
                 test_re.append(u.detach())
 
             model.train()
 
-            test_re = torch.cat(test_re,dim=0).cpu()
+            test_re = torch.stack(test_re,dim=1).cpu()
             
             for testtime in [0,(timesteps-1)//2, -1]:
-                writer.add_figure('u_time_{}'.format(testtime),
-                                    add_plot(test_re[testtime,0],label[testtime,0]),
+                writer.add_figure('p0_{}'.format(testtime),
+                                    add_plot(magnitude(test_re[0,testtime]),
+                                            magnitude(label[0,testtime])),
                                     i)
-                writer.add_figure('v_time_{}'.format(testtime),
-                                    add_plot(test_re[testtime,1],label[testtime,1]),
+                writer.add_figure('p-1_{}'.format(testtime),
+                                    add_plot(magnitude(test_re[-1,testtime]),
+                                            magnitude(label[-1,testtime])),
+                                    i)
+                writer.add_figure('ph_{}'.format(testtime),
+                                    add_plot(magnitude(test_re[8,testtime]),
+                                            magnitude(label[8,testtime])),
                                     i)
 
-            test_error = criterier(test_re[-1],label[-1])/criterier(label[-1],torch.zeros_like(label[-1]))
-            test_error_u = criterier(test_re[-1,0],label[-1,0])/criterier(label[-1,0],torch.zeros_like(label[-1,0]))
-            test_error_v = criterier(test_re[-1,1],label[-1,1])/criterier(label[-1,1],torch.zeros_like(label[-1,1]))
+            test_error = criterier(test_re[:,-1],label[:,-1])/criterier(label[:,-1],torch.zeros_like(label[:,-1]))
+            # test_error_u = criterier(test_re[-1,0],label[-1,0])/criterier(label[-1,0],torch.zeros_like(label[-1,0]))
+            # test_error_v = criterier(test_re[-1,1],label[-1,1])/criterier(label[-1,1],torch.zeros_like(label[-1,1]))
 
-            writer.add_scalar('U rel_error', test_error_u, i)
-            writer.add_scalar('V rel_error', test_error_v, i)
+            # writer.add_scalar('U rel_error', test_error_u, i)
+            # writer.add_scalar('V rel_error', test_error_v, i)
+            writer.add_scalar('rel_error', test_error, i)
             if test_error < test_error_best:
                 test_error_best = test_error
                 torch.save(model.state_dict(), params.modelsavepath)
