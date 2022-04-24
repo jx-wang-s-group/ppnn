@@ -1,12 +1,12 @@
 ---
 seed:           10
-device:         cuda:0
+device:         cuda:1
 
 
 # mesh, time
 finemeshsize:   257
 coarsemeshsize: 49
-timesteps:      50
+timesteps:      100
 length:         6.4
 dt:             0.002
 datatimestart:  10
@@ -14,14 +14,14 @@ datatimestart:  10
 
 
 # parameters
-parahigh:       0.8
+parahigh:       1.3
 paralow:        0.2
-num_para:       8
+num_para:       12
 repeat:         16
 
 
 # data
-datafile:       /home/xinyang/storage/projects/PDE_structure/RD/RD.pt
+datafile:       /home/xinyang/storage/projects/PDE_structure/RD/RD_new.pt
 
 # network
 network:        cnn2dRich
@@ -39,8 +39,8 @@ pde:            True
 
 
 # path
-tensorboarddir: /home/xinyang/storage/projects/PDE_structure/RD/pPDE
-modelsavepath:  /home/xinyang/storage/projects/PDE_structure/RD/model_pPDE.pth
+tensorboarddir: /home/xinyang/storage/projects/PDE_structure/RD/new/pPDE
+modelsavepath:  /home/xinyang/storage/projects/PDE_structure/RD/new/model_pPDE.pth
 
 # equation
 rhsu:           rdpu

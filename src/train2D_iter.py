@@ -33,7 +33,9 @@ if __name__=='__main__':
     mus = mus.reshape(-1,1,1,1,)
 
     mutest = mu[0:params.num_para]
+    # print('test paras: ',mutest)
     testIDs = torch.linspace(0,params.num_para-1,params.num_para, device=device,dtype = torch.long)
+    
     def padbcx(uinner):
         return torch.cat((uinner[:,:,-1:],uinner,uinner[:,:,:1]),dim=2)
 
@@ -65,6 +67,14 @@ if __name__=='__main__':
         def pde_du(u,mu) -> torch.Tensor:
             u1 = mcvter.down(u[:,:1])[:,:,:-1,:-1]
             v1 = mcvter.down(u[:,1:])[:,:,:-1,:-1]
+            for _ in range(params.iter-1):
+                ux = padbcx(u1)
+                uy = padbcy(u1)
+                vx = padbcx(v1)
+                vy = padbcy(v1)
+                utmp = u1+dt*rhsu(u1,v1,mu,dudx,dudy,d2udx2,d2udy2,ux,uy,dx,dy,dx2,dy2)
+                v1 = v1+dt*rhsv(u1,v1,mu,dudx,dudy,d2udx2,d2udy2,vx,vy,dx,dy,dx2,dy2)
+                u1 = utmp
             ux = padbcx(u1)
             uy = padbcy(u1)
             vx = padbcx(v1)
@@ -182,7 +192,7 @@ if __name__=='__main__':
     train_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE,pin_memory=True,shuffle=True, num_workers=8)
 
     model = getattr(models,params.network)().to(device)
-
+    
     print('Model parameters: {}\n'.format(model_count(model)))
     optimizer = torch.optim.Adam(model.parameters(), lr=params.lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=50, cooldown=250, verbose=True, min_lr=1e-5)

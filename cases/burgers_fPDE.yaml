@@ -14,10 +14,10 @@ datatimestart:  0
 
 
 # parameters
-parahigh:       0.09
+parahigh:       0.07
 paralow:        0.02
-num_para:       8
-repeat:         32
+num_para:       6
+repeat:         36
 
 
 # data

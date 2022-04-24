@@ -1,10 +1,10 @@
 import os
 import torch
 
-from utility.pyof import OneStepRunOFCoarse
 from utility.utils import mesh_convertor
 import models
 from src.operators import d2udx2_2D, d2udy2_2D, dudx_2D, dudy_2D
+import rhs
 
 
 def padbcx(uinner):
@@ -13,35 +13,40 @@ def padbcx(uinner):
 def padbcy(uinner):
     return torch.cat((uinner[:,:,:,-1:],uinner,uinner[:,:,:,:1]),dim=3)
 
-
 def padBC_rd(u):
     tmp = torch.cat((u,u[:,:,:,:1]),dim=3)
     return torch.cat((tmp,tmp[:,:,:1]),dim=2)
 
 
 torch.manual_seed(10)
-ID = 2
-modelpath = '/home/xinyang/storage/projects/PDE_structure/2Dburgers/model_PDE.pth'
-modeltype = 'cnn2dRich'
-normpath = '/home/xinyang/storage/projects/PDE_structure/2Dburgers/PDE'
-savename = '/home/xinyang/storage/projects/PDE_structure/2Dburgers/known/Test/test/PDEresult{0}.2pt'.format(ID)
-pde = True
+ID = 5
+modelpath = '/home/xinyang/storage/projects/PDE_structure/RD/new/model_noPDE.pth'
+modeltype = 'cnn2d'
+normpath = '/home/xinyang/storage/projects/PDE_structure/RD/new/noPDE'
+savename = '/home/xinyang/storage/projects/PDE_structure/RD/new/Test2/noPDEresult{0}.pt'.format(ID)
+pde = False
+rhsu = 'rdpu'#rdFu, rdpu
+rhsv = 'rdpv'#rdFv, rdpv
+length = 6.4
+dt = 200*1e-5
 device = torch.device('cpu')
 
 teststeps = 200
-paras = torch.tensor([[[[0.02,0.025,0.08]]]])
-para = paras[:,:,:,ID:ID+1]
+paras = torch.tensor([[[[0.65]]],[[[0.75]]],[[[0.85]]],[[[0.95]]],[[[1.05]]],
+                      [[[1.15]]],[[[1.25]]],])
+para = paras[ID:ID+1]
 
-u0 = torch.load('/home/xinyang/storage/projects/PDE_structure/2Dburgers/known/Test/test/burgers_gt_test2.pt')[0,:1]
+u0 = torch.load('/home/xinyang/storage/projects/PDE_structure/RD/new/RD_gt2.pt')[ID,10:11]
 
 if pde:
+    rhsu = getattr(rhs,rhsu)
+    rhsv = getattr(rhs,rhsv)
     feature_size = 257
     cmesh = 49
-    dx = 3.2/(cmesh-1)
+    dx = length/(cmesh-1)
     mcvter = mesh_convertor(feature_size,cmesh,dim=2)
     dx2 = dx**2
     dy,dy2=dx,dx2
-    dt = 200*1e-4
     
     d2udx2 = d2udx2_2D(accuracy=2,device=device)
     d2udy2 = d2udy2_2D(accuracy=2,device=device)
@@ -51,16 +56,24 @@ if pde:
     def pde_du(u,mu) -> torch.Tensor:
         u1 = mcvter.down(u[:,:1])[:,:,:-1,:-1]
         v1 = mcvter.down(u[:,1:])[:,:,:-1,:-1]
+        # for _ in range(1):
+        #     ux = padbcx(u1)
+        #     uy = padbcy(u1)
+        #     vx = padbcx(v1)
+        #     vy = padbcy(v1)
+        #     u1 = u1+dt*rhsu(u1,v1,mu,dudx,dudy,d2udx2,d2udy2,ux,uy,dx,dy,dx2,dy2)
+        #     v1 = v1+dt*rhsv(u1,v1,mu,dudx,dudy,d2udx2,d2udy2,vx,vy,dx,dy,dx2,dy2)
+        #     u1 = utmp
         ux = padbcx(u1)
         uy = padbcy(u1)
         vx = padbcx(v1)
-        vy = padbcy(v1)
+        vy = padbcy(v1)            
         return torch.cat((
             mcvter.up(
-                padBC_rd(dt*(-u1*dudx(ux)/dx - v1*dudy(uy)/dy + mu*(d2udx2(ux)/dx2+d2udy2(uy)/dy2)))
+                padBC_rd(dt*(rhsu(u1,v1,mu,dudx,dudy,d2udx2,d2udy2,ux,uy,dx,dy,dx2,dy2)))
             ),
             mcvter.up(
-                padBC_rd(dt*(-u1*dudx(vx)/dx - v1*dudy(vy)/dy + mu*(d2udx2(vx)/dx2+d2udy2(vy)/dy2)))
+                padBC_rd(dt*(rhsv(u1,v1,mu,dudx,dudy,d2udx2,d2udy2,vx,vy,dx,dy,dx2,dy2)))
             )),dim=1)
 
 inmean = torch.load(os.path.join(normpath,'inmean.pt'),map_location=device)
@@ -80,13 +93,12 @@ model.load_state_dict(torch.load(modelpath,map_location=device))
 model.eval()
 
 result = []
-
+import time
+start = time.time()
 for i in range(teststeps):
-    # u = torch.cat((u0,torch.sqrt(u0[:,0:1]**2+u0[:,1:2]**2)),dim=1)
     
     if pde:
         pdeu = pde_du(u0,para)
-        # pdeux = torch.cat((pdeu,torch.sqrt(pdeu[:,0:1]**2+pdeu[:,1:2]**2)),dim=1)
         u0 = padBC_rd(model(
                 (u0[:,:,:-1,:-1]-inmean)/instd,
                 (para-parsmean)/parsstd,
@@ -100,6 +112,6 @@ for i in range(teststeps):
             + u0
         
     result.append(u0.detach().cpu())
-
+print('time:',time.time()-start)
 result = torch.cat(result,dim=0)
 torch.save(result, savename)

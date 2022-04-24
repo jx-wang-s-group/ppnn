@@ -6,23 +6,24 @@ from utility.utils import mesh_convertor
 import models
 
 torch.manual_seed(10)
-modelpath = '/home/xinyang/storage/projects/PDE_structure/NS/origin/model_pPDE.pth'
+ID = 0
+modelpath = '/home/xinyang/storage/projects/PDE_structure/NS/magnetic/model_noPDE.pth'
 # /home/xinyang/storage/projects/PDE_structure/OpenFoam/longer/pPDE.pth
-modeltype = 'cnn2dNSRich'
-normpath = '/home/xinyang/storage/projects/PDE_structure/NS/origin/PDE'
-savename = '/home/xinyang/storage/projects/PDE_structure/NS/origin/Test/PDEresult1.pt'
-pde = True
+modeltype = 'cnn2dns'
+normpath = '/home/xinyang/storage/projects/PDE_structure/NS/magnetic/noPDE'
+savename = '/home/xinyang/storage/projects/PDE_structure/NS/magnetic/Test/noPDEresult{0}.pt'.format(ID)
+pde = False
 device = torch.device('cpu')
 
 testlength = 219
-para = torch.tensor([[[[0.375]],[[9000]]]])
+para = torch.tensor([[[[0.475]],[[9090]]]])
 
-u0 = torch.load('/home/xinyang/storage/projects/PDE_structure/NS/origin/Test/pipe_gt.pt')[1,7::4][:1]
+u0 = torch.load('/home/xinyang/storage/projects/PDE_structure/NS/magnetic/pipe_gt_mag.pt')[ID][:1]
 
 if pde:
     solver = 'icoFoam' #'/home/xinyang/OpenFOAM/xinyang-8/applications/solvers/incompressible/myicoFoam/myicoFoam'
-    coarsesolver = OneStepRunOFCoarse('/home/xinyang/storage/projects/PDE_structure/NS/origin/template',
-                                      '/home/xinyang/storage/projects/PDE_structure/NS/origin/tmp_test1',
+    coarsesolver = OneStepRunOFCoarse('/home/xinyang/storage/projects/PDE_structure/NS/magnetic/template',
+                                      '/home/xinyang/storage/projects/PDE_structure/NS/magnetic/tmp_test1',
                                         0.8,(25,100),
                                         para[0,0].squeeze().item(),
                                         1/para[0,1].squeeze().item(),25,
