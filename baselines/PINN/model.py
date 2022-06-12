@@ -27,7 +27,7 @@ class pinn(nn.Module):
         mnet.append(nn.Linear(layers[-1], layers[-1]))
         self.mnet = nn.Sequential(*mnet)
 
-    def forward(self,x, y, t, u0,mu):
+    def forward(self, x, y, t, u0, mu):
         tmp = self.encoder(torch.cat((u0,mu*self.rw@self.cw),dim=1)).squeeze()
         inp = torch.cat((tmp, x, y, t),dim=1)
         return self.mnet(inp)
