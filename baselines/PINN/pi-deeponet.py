@@ -3,10 +3,9 @@ import torch.nn as nn
 from torch.utils.data import Dataset
 from torch.autograd import grad
 from torch.utils.tensorboard import SummaryWriter
-from model import pinno, pinnsf
+from model import deeponet
 from utils import eq_loss
 import matplotlib.pyplot as plt
-
 
 class myset(Dataset):
     def __init__(self, 
@@ -100,7 +99,7 @@ class myset(Dataset):
 
 
 def main():
-    device = torch.device("cuda:0")
+    device = torch.device("cuda:2")
     iterations = int(5e5)    
     batch_size = 3200
     length = (2,3.2,3.2)
@@ -129,10 +128,8 @@ def main():
         umean, ustd, vmean, vstd, tstd, xstd, ystd, 
         batch_size, length, loss_fn, device)
 
-
-    # layers = [51]+[100]*7+[2]
     layers = [100]*7
-    model = pinnsf(layers).to(device)
+    model = deeponet(layers).to(device)
     lr = 1e-3
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, 
@@ -154,7 +151,7 @@ def main():
         return fig, u
 
 
-    writer = SummaryWriter(log_dir='/home/xinyang/storage/projects/PDE_structure/baseline/PINN/norm0')
+    writer = SummaryWriter(log_dir='/home/xinyang/storage/projects/PDE_structure/baseline/pi_deeponet/norm0')
     for i in range(iterations):
         (data_in, label), ic, bc, res = next(data)
         label = label.to(device)
@@ -179,7 +176,7 @@ def main():
                 (loss_fn(ut, ulabel)/
                 loss_fn(ulabel,torch.zeros_like(ulabel))).item(), i)
             print(i, loss.item(), loss_data.item(), loss_ic.item(), loss_bc.item(), loss_res.item())
-            torch.save(model.state_dict(), '/home/xinyang/storage/projects/PDE_structure/baseline/PINN/modelpinn_norm0.pt')
+            torch.save(model.state_dict(), '/home/xinyang/storage/projects/PDE_structure/baseline/pi_deeponet/modelnorm0.pt')
             
 if __name__ == '__main__':
     main()

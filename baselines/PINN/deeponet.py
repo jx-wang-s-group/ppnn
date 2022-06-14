@@ -3,10 +3,9 @@ import torch.nn as nn
 from torch.utils.data import Dataset
 from torch.autograd import grad
 from torch.utils.tensorboard import SummaryWriter
-from model import pinno, pinnsf
+from model import deeponet
 from utils import eq_loss
 import matplotlib.pyplot as plt
-
 
 class myset(Dataset):
     def __init__(self, 
@@ -89,18 +88,16 @@ class myset(Dataset):
         uicout = self.uicout[idp, idf]
 
         # data, ic, bc, res
-        return ((x, y, t, uin, pin), ulable), \
-               (x, y, uin, pin, uicout),\
-               (uin, pin),\
-               (uin, pin)
+        return (x, y, t, uin, pin), ulable
 
 
     def __len__(self):
         return self.N
 
 
+
 def main():
-    device = torch.device("cuda:0")
+    device = torch.device("cuda:3")
     iterations = int(5e5)    
     batch_size = 3200
     length = (2,3.2,3.2)
@@ -116,23 +113,12 @@ def main():
     
     data = iter(mset)
     
-    
     loss_fn = nn.MSELoss()
-    zero1 = torch.zeros([batch_size, 1,], device=device)
-    zero2 = torch.zeros([batch_size, 2,], device=device)
-    one1 = length[1]*torch.ones([batch_size, 1,], device=device)
-    
-    
-    ones  = torch.ones([batch_size, 1], device=device)
-
-    bcloss, icloss, resloss=eq_loss(ones,  one1, zero1, zero2, 
-        umean, ustd, vmean, vstd, tstd, xstd, ystd, 
-        batch_size, length, loss_fn, device)
 
 
-    # layers = [51]+[100]*7+[2]
+
     layers = [100]*7
-    model = pinnsf(layers).to(device)
+    model = deeponet(layers).to(device)
     lr = 1e-3
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, 
@@ -154,33 +140,28 @@ def main():
         return fig, u
 
 
-    writer = SummaryWriter(log_dir='/home/xinyang/storage/projects/PDE_structure/baseline/PINN/norm0')
+    writer = SummaryWriter(log_dir='/home/xinyang/storage/projects/PDE_structure/baseline/deeponet/norm0')
     for i in range(iterations):
-        (data_in, label), ic, bc, res = next(data)
+        data_in, label = next(data)
         label = label.to(device)
         loss_data = loss_fn(model(*data_in), label)
-        loss_ic = icloss(model, *ic)
-        loss_bc = bcloss(model, *bc)
-        loss_res = resloss(model, *res)
-        loss = 20*loss_data + 20*loss_ic + loss_bc + loss_res
+        loss = loss_data 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         scheduler.step()
         if i % 100 == 0:
             writer.add_scalar('data loss', loss_data.item(), i)
-            writer.add_scalar('ic loss', loss_ic.item(), i)
-            writer.add_scalar('bc loss', loss_bc.item(), i)
-            writer.add_scalar('equ loss', loss_res.item(), i)
             writer.add_scalar('total loss', loss.item(), i)
             fg, ut = test(model)
             writer.add_figure('last',fg,i)
             writer.add_scalar('rel_error', 
                 (loss_fn(ut, ulabel)/
                 loss_fn(ulabel,torch.zeros_like(ulabel))).item(), i)
-            print(i, loss.item(), loss_data.item(), loss_ic.item(), loss_bc.item(), loss_res.item())
-            torch.save(model.state_dict(), '/home/xinyang/storage/projects/PDE_structure/baseline/PINN/modelpinn_norm0.pt')
+            print(i, loss.item(), loss_data.item())
+            torch.save(model.state_dict(), '/home/xinyang/storage/projects/PDE_structure/baseline/deeponet/modelnorm0.pt')
             
 if __name__ == '__main__':
+    torch.set_num_threads(6)
     main()
         
