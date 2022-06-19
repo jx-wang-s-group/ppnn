@@ -97,8 +97,8 @@ class pinnsf(nn.Module):
         self.cw = nn.Parameter(torch.randn(1,1,1,257)) 
         self.rw = nn.Parameter(torch.randn(1,1,257,1))
 
-        self.bnet = sifanMLP([48,100,100,100,100])
-        self.mnet = sifanMLP([103]+layers+[2])
+        self.bnet = sifanMLP([48,]+[layers[0]]*(len(layers)//2), act='ReLU')
+        self.mnet = sifanMLP([103]+layers+[2], act='ReLU')
 
     def forward(self, x, y, t, u0, mu):
         tmp = self.encoder(torch.cat((u0,mu*self.rw@self.cw),dim=1)).squeeze()
@@ -145,8 +145,8 @@ class deeponet(nn.Module):
         # trunk_net.append(nn.Linear(layers[-1], layers[-1]))
         # self.trunk_net = nn.Sequential(*trunk_net)
 
-        self.branch_net = sifanMLP([48,100,100,100,100])
-        self.trunk_net = sifanMLP([3]+layers)
+        self.branch_net = sifanMLP([48,layers[0]]+[layers[0]]*(len(layers)//2), act='ReLU')
+        self.trunk_net = sifanMLP([3]+layers, act='ReLU')
 
     def forward(self, x, y, t, u0, mu):
         tmp = self.encoder(torch.cat((u0,mu*self.rw@self.cw),dim=1)).squeeze()

@@ -1,10 +1,9 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
-from torch.autograd import grad
 from torch.utils.tensorboard import SummaryWriter
 from model import deeponet
-from utils import eq_loss
+from utility.utils import model_count
 import matplotlib.pyplot as plt
 
 class myset(Dataset):
@@ -24,6 +23,9 @@ class myset(Dataset):
         self.num_tf = self.num_t*self.num_f
         
         self.p = p
+        self.pmean = self.p.mean()
+        self.pstd = self.p.std()
+        self.p = (self.p - self.pmean)/self.pstd
 
         xmesh = torch.linspace(0, length[1], self.Nx, device=device)
         ymesh = torch.linspace(0, length[2], self.Ny, device=device)
@@ -97,7 +99,7 @@ class myset(Dataset):
 
 
 def main():
-    device = torch.device("cuda:3")
+    device = torch.device("cuda:2")
     iterations = int(5e5)    
     batch_size = 3200
     length = (2,3.2,3.2)
@@ -116,9 +118,10 @@ def main():
     loss_fn = nn.MSELoss()
 
 
-
-    layers = [100]*7
+    # layers = [100]*7
+    layers = [200]*25
     model = deeponet(layers).to(device)
+    print(model_count(model))
     lr = 1e-3
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, 
@@ -140,7 +143,7 @@ def main():
         return fig, u
 
 
-    writer = SummaryWriter(log_dir='/home/xinyang/storage/projects/PDE_structure/baseline/deeponet/norm0')
+    writer = SummaryWriter(log_dir='/home/xinyang/storage/projects/PDE_structure/baseline0/deeponet/norm_relu-L')
     for i in range(iterations):
         data_in, label = next(data)
         label = label.to(device)
@@ -159,7 +162,7 @@ def main():
                 (loss_fn(ut, ulabel)/
                 loss_fn(ulabel,torch.zeros_like(ulabel))).item(), i)
             print(i, loss.item(), loss_data.item())
-            torch.save(model.state_dict(), '/home/xinyang/storage/projects/PDE_structure/baseline/deeponet/modelnorm0.pt')
+            torch.save(model.state_dict(), '/home/xinyang/storage/projects/PDE_structure/baseline0/deeponet/modelnorm_relu-L.pt')
             
 if __name__ == '__main__':
     torch.set_num_threads(6)

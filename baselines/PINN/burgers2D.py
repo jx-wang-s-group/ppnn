@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
-from torch.autograd import grad
 from torch.utils.tensorboard import SummaryWriter
 from model import pinno, pinnsf
 from utils import eq_loss
@@ -25,6 +24,9 @@ class myset(Dataset):
         self.num_tf = self.num_t*self.num_f
         
         self.p = p
+        self.pmean = self.p.mean()
+        self.pstd = self.p.std()
+        self.p = (self.p - self.pmean)/self.pstd
 
         xmesh = torch.linspace(0, length[1], self.Nx, device=device)
         ymesh = torch.linspace(0, length[2], self.Ny, device=device)
@@ -113,6 +115,7 @@ def main():
     umean,ustd = mset.umean, mset.ustd
     umean, vmean = umean[:,:1].to(device), umean[:,1:].to(device)
     ustd, vstd = ustd[:,:1].to(device), ustd[:,1:].to(device)
+    pmean, pstd = mset.pmean, mset.pstd
     
     data = iter(mset)
     
@@ -154,14 +157,14 @@ def main():
         return fig, u
 
 
-    writer = SummaryWriter(log_dir='/home/xinyang/storage/projects/PDE_structure/baseline/PINN/norm0')
+    writer = SummaryWriter(log_dir='/home/xinyang/storage/projects/PDE_structure/baseline0/PINN/norm0_relu')
     for i in range(iterations):
         (data_in, label), ic, bc, res = next(data)
         label = label.to(device)
         loss_data = loss_fn(model(*data_in), label)
         loss_ic = icloss(model, *ic)
         loss_bc = bcloss(model, *bc)
-        loss_res = resloss(model, *res)
+        loss_res = resloss(model, *res, pmean, pstd)
         loss = 20*loss_data + 20*loss_ic + loss_bc + loss_res
         optimizer.zero_grad()
         loss.backward()
@@ -179,7 +182,7 @@ def main():
                 (loss_fn(ut, ulabel)/
                 loss_fn(ulabel,torch.zeros_like(ulabel))).item(), i)
             print(i, loss.item(), loss_data.item(), loss_ic.item(), loss_bc.item(), loss_res.item())
-            torch.save(model.state_dict(), '/home/xinyang/storage/projects/PDE_structure/baseline/PINN/modelpinn_norm0.pt')
+            torch.save(model.state_dict(), '/home/xinyang/storage/projects/PDE_structure/baseline0/PINN/modelpinn_norm_relu.pt')
             
 if __name__ == '__main__':
     main()
