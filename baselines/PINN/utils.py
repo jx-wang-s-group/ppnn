@@ -67,7 +67,7 @@ def eq_loss(ones,
 
 
 
-    def resloss(model:nn.Module, uin, pin):
+    def resloss(model:nn.Module, uin, pin, pmean, pstd):
         x = length[1]*torch.rand((batch_size, 1), device=device, requires_grad = True)
         y = length[2]*torch.rand((batch_size, 1), device=device, requires_grad = True)
         t = length[0]*torch.rand((batch_size, 1), device=device, requires_grad = True)
@@ -89,8 +89,8 @@ def eq_loss(ones,
         v_xx = mygrad(v_x, x) / xstd
         v_yy = mygrad(v_y, y) / ystd
 
-        residual1 = u_t + upred * u_x + vpred * u_y - pin[:,:,0,0] * (u_xx + u_yy)
-        residual2 = v_t + upred * v_x + vpred * u_y - pin[:,:,0,0] * (v_xx + v_yy)
+        residual1 = u_t + upred * u_x + vpred * u_y - (pin[:,:,0,0]*pstd+pmean) * (u_xx + u_yy)
+        residual2 = v_t + upred * v_x + vpred * u_y - (pin[:,:,0,0]*pstd+pmean) * (v_xx + v_yy)
 
         residual = torch.cat([residual1, residual2], dim=1)
 
