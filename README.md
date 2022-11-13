@@ -1,2 +1,2 @@
-# ppnn
+# PPNN
 PDE Preserved Neural Network
