@@ -11,7 +11,7 @@ PDE is preserved in PPNN as convolutional residual networks formulated in a mult
 ## Structure
 
 <!-- ![structure](docs/demo/PDE_preserved_schematic2.png) -->
-<p align="center"><img src="docs/demo/PDE_preserved_schematic2.png" alt="structure" align="center" width="600px"><>
+<p align="center"><img src="docs/demo/PDE_preserved_schematic2.png" alt="structure" align="center" width="600px"></p>
 
 ## Demo case
 * Navier-Stokes equation 
