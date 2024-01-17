@@ -1,0 +1,48 @@
+---
+seed:           10
+device:         cuda:0
+
+
+# mesh, time
+finemeshsize:   257
+coarsemeshsize: 49
+timesteps:      100
+length:         3.2
+dt:             0.02
+datatimestart:  0
+
+
+
+# parameters
+parahigh:       0.07
+paralow:        0.02
+num_para:       6
+repeat:         36
+
+
+# data
+datafile:       /home/xinyang/storage/projects/PDE_structure/2Dburgers/unknown/data.pt
+
+# network
+network:        cnn2d
+
+
+# training
+epochs:         3200
+batchsize:      800
+lr:             1.e-3
+noiseinject:    False
+
+
+# add pde?
+pde:            True
+
+
+# path
+tensorboarddir: /home/xinyang/storage/projects/PDE_structure/2Dburgers/fPDE
+modelsavepath:  /home/xinyang/storage/projects/PDE_structure/2Dburgers/model_fPDE.pth
+
+# equation
+rhsu:           burgers2DFu
+rhsv:           burgers2DFv
+...

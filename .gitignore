@@ -1,0 +1,11 @@
+*.pyc
+
+*.png
+*.gif
+*.jpg
+
+*.pth
+*.pt
+
+*.npz
+*.npy

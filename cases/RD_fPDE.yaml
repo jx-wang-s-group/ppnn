@@ -1,0 +1,48 @@
+---
+seed:           10
+device:         cuda:3
+
+
+# mesh, time
+finemeshsize:   257
+coarsemeshsize: 49
+timesteps:      100
+length:         6.4
+dt:             0.002
+datatimestart:  10
+
+
+
+# parameters
+parahigh:       1.3
+paralow:        0.2
+num_para:       12
+repeat:         16
+
+
+# data
+datafile:       /home/xinyang/storage/projects/PDE_structure/RD/RD_new.pt
+
+# network
+network:        cnn2dRich
+
+
+# training
+epochs:         1000
+batchsize:      800
+lr:             1.e-3
+noiseinject:    False
+
+
+# add pde?
+pde:            True
+
+
+# path
+tensorboarddir: /home/xinyang/storage/projects/PDE_structure/RD/new/fPDE
+modelsavepath:  /home/xinyang/storage/projects/PDE_structure/RD/new/model_fPDE.pth
+
+# equation
+rhsu:           rdFu
+rhsv:           rdFv
+...
