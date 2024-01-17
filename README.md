@@ -20,6 +20,14 @@ equations (PDE) operators and network structures, resulting in a PDE-preserved n
 
 ## Code
 * requirements
+   ```bash
+   pytorch
+   numpy
+   matplotlib
+   tensorboard
+
+   deepxde # required by DeepONet only
+   ```
 * usage
 ```bash
 python src/train2D.py cases/CASE_NAME.yaml
