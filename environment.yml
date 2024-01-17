@@ -1,0 +1,6 @@
+pytorch
+numpy
+matplotlib
+tensorboard
+
+deepxde # required by DeepONet only

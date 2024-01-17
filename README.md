@@ -1,19 +1,42 @@
 # PPNN
-PDE Preserved Neural Network
+## PDE Preserved Neural Network
 
-Manuscript on arXiv: [Predicting parametric spatiotemporal dynamics by
-multi-resolution PDE structure-preserved deep learning](https://arxiv.org/pdf/2205.03990.pdf)
+Published on Communications Physics: [Multi-resolution partial differential equations preserved learning framework for spatiotemporal dynamics](https://www.nature.com/articles/s42005-024-01521-z) | [arxiv version](https://arxiv.org/pdf/2205.03990.pdf)
 
-## Abstract
-Pure data-driven deep learning models suffer from high training costs, error accumulation, and poor generalizability when predicting complex physical processes. A more promising way is to leverage our prior physics knowledge in scientific deep learning models, known as physicsinformed deep learning (PiDL). In most PiDL frameworks, the physics prior is utilized to regularize neural network training by incorporating governing equations into the loss function. The resulting physical constraint, imposed in a soft manner, relies heavily on a proper setting of hyperparameters that weigh each loss term. To this end, we propose a new direction to leverage physics prior knowledge by “baking” the mathematical structure of governing equations into the neural network architecture, namely PDE-preserved neural network (PPNN). The discretized
-PDE is preserved in PPNN as convolutional residual networks formulated in a multi-resolution setting. This physics-inspired learning architecture endows PPNN with excellent generalizability and long-term prediction accuracy compared to the state-of-the-art black-box baselines. The effectiveness and merit of the proposed methods have been demonstrated over a handful of spatiotemporal dynamical systems governed by spatiotemporal PDEs, including reaction-diffusion, Burgers’, and Navier-Stokes equations
-
-## Structure
-
-<!-- ![structure](docs/demo/PDE_preserved_schematic2.png) -->
 <p align="center"><img src="docs/demo/PDE_preserved_schematic.png" alt="structure" align="center" width="600px"></p>
 
-## Demo case
-* Navier-Stokes equation 
+<details>
+<summary>Abstract</summary>
 
- ![Navier-Stokes equation](docs/demo/ns.gif)
+Traditional data-driven deep learning models often struggle with high training costs, error accumulation, and poor generalizability in complex physical processes. Physics-informed deep learning (PiDL) addresses these challenges by incorporating physical principles into the model. Most PiDL approaches regularize training by embedding governing equations into the loss function, yet this depends heavily on extensive hyperparameter tuning to weigh each loss term. To this end, we propose to leverage physics prior knowledge by “baking” the discretized governing equations into the neural network architecture via the connection between the partial differential
+equations (PDE) operators and network structures, resulting in a PDE-preserved neural network (PPNN). This method, embedding discretized PDEs through convolutional residual networks in a multi-resolution setting, largely improves the generalizability and long-term prediction accuracy, outperforming conventional black-box models. The effectiveness and merit of the proposed methods have been demonstrated across various spatiotemporal dynamical systems governed by spatiotemporal PDEs, including reaction-diffusion, Burgers’, and Navier-Stokes equations.
+
+* results
+    * Navier-Stokes equation 
+<p align="center"><img src="docs/demo/ns.gif" alt="structure" align="center" width="600px"></p>
+
+</details>
+
+
+## Code
+* requirements
+* usage
+```bash
+python src/train2D.py cases/CASE_NAME.yaml
+```
+----
+* `src`: PPNN source codes
+    * `opertors.py`: numerical operators, is used to generate dataset. Also works as the PDE-preserving part of PPNN
+    * `rhs.py`: define various right hand side of PDEs
+    * `train2D.py`: the main training script for RD and burgers case. It requires config files. Examples of config files are listed in the folder `cases`
+    * `models.py`: deep learning neural networks
+
+* `case`: contains yaml files that list configurations for different cases. 
+
+* `Bv`: contains source code for parameterizing different boundary conditions, as disscussed in the first section in the supplementary informantion.
+
+* `baselines`: source code for the baseline methods including FNO, PINN and DeepONet
+
+
+
+
