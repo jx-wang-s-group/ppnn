@@ -1,23 +1,30 @@
 cff-version: 1.2.0
 message: "If you find our work relevant to your research, please cite"
-authors:
-- family-names: "Liu"
-  given-names: "Xin-Yang"
-  orcid: "https://orcid.org/0000-0003-1423-605X"
-- family-names: "Zhu"
-  given-names: "Min"
-  orcid: "https://orcid.org/0000-0003-4550-5662"
-- family-names: "Lu"
-  given-names: "Lu"
-  orcid: "https://orcid.org/0000-0002-5476-5768"
-- family-names: "Sun"
-  given-names: "Hao"
-  orcid: "https://orcid.org/0000-0002-5145-3259"
-- family-names: "Wang"
-  given-names: "Jian-Xun"
-  orcid: "https://orcid.org/0000-0002-9030-1733"
-title: "Multi-resolution partial differential equations preserved learning framework for spatiotemporal dynamics"
-version: 2.0.4
-doi: https://doi.org/10.1038/s42005-024-01521-z
-date-released: 2024-01-13
-url: "https://www.nature.com/articles/s42005-024-01521-z"
+preferred-citation:
+  type: article
+  authors:
+  authors:
+  - family-names: "Liu"
+    given-names: "Xin-Yang"
+    orcid: "https://orcid.org/0000-0003-1423-605X"
+  - family-names: "Zhu"
+    given-names: "Min"
+    orcid: "https://orcid.org/0000-0003-4550-5662"
+  - family-names: "Lu"
+    given-names: "Lu"
+    orcid: "https://orcid.org/0000-0002-5476-5768"
+  - family-names: "Sun"
+    given-names: "Hao"
+    orcid: "https://orcid.org/0000-0002-5145-3259"
+  - family-names: "Wang"
+    given-names: "Jian-Xun"
+    orcid: "https://orcid.org/0000-0002-9030-1733"
+  doi: "10.1038/s42005-024-01521-z"
+  journal: "Communication Physics"
+  month: 1
+  start: 1 # First page number
+  end: 19 # Last page number
+  title: "My awesome research software"
+  issue: 7
+  volume: 31
+  year: 2024
