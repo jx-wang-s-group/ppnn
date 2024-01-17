@@ -46,5 +46,18 @@ python src/train2D.py cases/CASE_NAME.yaml
 * `baselines`: source code for the baseline methods including FNO, PINN and DeepONet
 
 
-
+## Citation
+If you find our work relevant to your research, please cite:
+```
+@article{liu2024multi,
+  title={Multi-resolution partial differential equations preserved learning framework for spatiotemporal dynamics},
+  author={Liu, Xin-Yang and Zhu, Min and Lu, Lu and Sun, Hao and Wang, Jian-Xun},
+  journal={Communications Physics},
+  volume={7},
+  number={1},
+  pages={31},
+  year={2024},
+  publisher={Nature Publishing Group UK London}
+}
+```
 
