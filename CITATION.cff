@@ -25,6 +25,7 @@ preferred-citation:
   start: 1 # First page number
   end: 19 # Last page number
   title: "Multi-resolution partial differential equations preserved learning framework for spatiotemporal dynamics"
-  issue: 7
-  volume: 31
+  issue: 31
+  volume: 7
   year: 2024
+  publisher: Nature Publishing Group UK London
