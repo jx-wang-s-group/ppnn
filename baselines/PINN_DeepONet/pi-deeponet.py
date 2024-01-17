@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset
 from torch.autograd import grad
 from torch.utils.tensorboard import SummaryWriter
-from model import deeponet
+from baselines.PINN_DeepONet.model impot deeponet
 from utils import eq_loss
 import matplotlib.pyplot as plt
 

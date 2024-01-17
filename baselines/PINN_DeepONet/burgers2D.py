@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
 from torch.utils.tensorboard import SummaryWriter
-from model import pinno, pinnsf
+from baselines.PINN_DeepONet.model impot pinno, pinnsf
 from utils import eq_loss
 import matplotlib.pyplot as plt
 
