@@ -277,16 +277,17 @@ class dudy_2D(operator_base2D):
 if __name__=='__main__':
     from math import pi, exp
     import matplotlib.pyplot as plt
+    import rhs
 
 
-    def smoother(u):
-        return conv1d(u,torch.tensor([[[0.3,0.4,0.3]]])) 
+    # def smoother(u):
+    #     return conv1d(u,torch.tensor([[[0.3,0.4,0.3]]])) 
 
-    def add_plot(x,u):
-        fig,ax = plt.subplots()
-        ax.plot(x,u)
-        ax.set_ylim([.4,2.6])
-        return fig
+    # def add_plot(x,u):
+    #     fig,ax = plt.subplots()
+    #     ax.plot(x,u)
+    #     ax.set_ylim([.4,2.6])
+    #     return fig
 
     # region
     ##################### test diffusion operator #####################
@@ -403,10 +404,10 @@ if __name__=='__main__':
     torch.manual_seed(10)
     
     device = torch.device('cuda:0')
-    beta = 1
-    para = 8
-    repeat = 32
-    mu = torch.linspace(0.02,0.09,para,device=device).reshape(-1,1)
+    # beta = 1
+    para = 5#8
+    repeat = 20#32
+    mu = torch.linspace(0.025,0.065,para,device=device).reshape(-1,1)
     mu = mu.repeat(repeat,1)
     num_para = para*repeat
     mu = mu.reshape(-1,1,1,1)
@@ -470,8 +471,8 @@ if __name__=='__main__':
         vy = padbcy(v)
         
         uv = u*u+v*v
-        u = u + dt*(-u*dudx(ux)/dx - v*dudy(uy)/dy + mu*(d2udx2(ux)/dx2+d2udy2(uy)/dy2) + beta*((1-uv)*u+uv*v))
-        v = v + dt*(-u*dudx(vx)/dx - v*dudy(vy)/dy + mu*(d2udx2(vx)/dx2+d2udy2(vy)/dy2) + beta*(-uv*u+(1-uv)*v))
+        u = u + dt*rhs.burgers2Dpu(u,v,mu,dudx,dudy,d2udx2,d2udy2,ux,uy,dx,dy,dx2,dy2)#(-u*dudx(ux)/dx - v*dudy(uy)/dy + mu*(d2udx2(ux)/dx2+d2udy2(uy)/dy2) + beta*((1-uv)*u+uv*v))
+        v = v + dt*rhs.burgers2Dpv(u,v,mu,dudx,dudy,d2udx2,d2udy2,ux,uy,dx,dy,dx2,dy2)#(-u*dudx(vx)/dx - v*dudy(vy)/dy + mu*(d2udx2(vx)/dx2+d2udy2(vy)/dy2) + beta*(-uv*u+(1-uv)*v))
         
         # if i%100==0:
         #     writer.add_figure('velocity',addplot(u,v),i)
@@ -485,7 +486,7 @@ if __name__=='__main__':
 
     resultu = torch.cat(resultu,dim=1)
     resultv = torch.cat(resultv,dim=1)
-    torch.save(torch.stack((resultu,resultv),dim=2),'burgers_2D_transfer.pth')
+    torch.save(torch.stack((resultu,resultv),dim=2),'/storage/xinyang/projects/PDE_structure/burgers_test.pt')
     # torch.save(resultu,'burgers_p_2Du.pth')
     # torch.save(resultv,'burgers_p_2Dv.pth')
     # endregion
@@ -842,76 +843,76 @@ if __name__=='__main__':
     # endregion ####################
 
     # region ##################### 1D KS ##############################
-    torch.manual_seed(42)
+    # torch.manual_seed(42)
     
-    device = torch.device('cuda:0')
-    repeat = 256
+    # device = torch.device('cuda:0')
+    # repeat = 256
     
-    num_para = 1*repeat
+    # num_para = 1*repeat
 
-    def padbc(uinner):
-        return torch.cat((uinner[:,:,-4:-1],uinner,uinner[:,:,1:4]),dim=2)
+    # def padbc(uinner):
+    #     return torch.cat((uinner[:,:,-4:-1],uinner,uinner[:,:,1:4]),dim=2)
 
         
-    x = torch.linspace(0,8*pi,129,device=device)
+    # x = torch.linspace(0,8*pi,129,device=device)
     
-    x = x.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1])
-    dt = 1e-4
-    dx = pi/8
-    dx2 = dx**2
-    dx4 = dx2**2
-    print(dt/dx4)
-    t=0
+    # x = x.unsqueeze(0).unsqueeze(0).repeat([num_para,1,1])
+    # dt = 1e-4
+    # dx = pi/8
+    # dx2 = dx**2
+    # dx4 = dx2**2
+    # print(dt/dx4)
+    # t=0
     
-    phi0 = torch.randn((num_para,1,1),device=device)
-    phi1 = torch.randn((num_para,1,1),device=device)
-    initu = torch.cos(x/16 + phi0)*(1+torch.sin(x/16 + phi1)) + torch.exp(-25*(x/8/pi-0.5)**2)
-    # initu = (initu-initu.amin(dim=(1,2,3),keepdim=True))/(initu.amax(dim=(1,2,3),keepdim=True)-initu.amin(dim=(1,2,3),keepdim=True))  + 0.1
+    # phi0 = torch.randn((num_para,1,1),device=device)
+    # phi1 = torch.randn((num_para,1,1),device=device)
+    # initu = torch.cos(x/16 + phi0)*(1+torch.sin(x/16 + phi1)) + torch.exp(-25*(x/8/pi-0.5)**2)
+    # # initu = (initu-initu.amin(dim=(1,2,3),keepdim=True))/(initu.amax(dim=(1,2,3),keepdim=True)-initu.amin(dim=(1,2,3),keepdim=True))  + 0.1
     
-    u = initu
+    # u = initu
     
-    resultu = []
+    # resultu = []
 
-    dudx = dudx_1D('Upwind',accuracy=3,device=device)
-    d2udx2 = diffusion1D('Central',accuracy=6,device=device)
-    d4udx4 = diffusion1D('Central_4th',accuracy=4,device=device)
+    # dudx = dudx_1D('Upwind',accuracy=3,device=device)
+    # d2udx2 = diffusion1D('Central',accuracy=6,device=device)
+    # d4udx4 = diffusion1D('Central_4th',accuracy=4,device=device)
     
 
-    def rk4(u):
-        def f(u):
-            return - d2udx2(padbc(u))/dx2 - d4udx4(padbc(u))/dx4 - 0.5*dudx(padbc(u*u))/dx + 0.1*torch.exp(-(x - 4*pi)**2/2)
+    # def rk4(u):
+    #     def f(u):
+    #         return - d2udx2(padbc(u))/dx2 - d4udx4(padbc(u))/dx4 - 0.5*dudx(padbc(u*u))/dx + 0.1*torch.exp(-(x - 4*pi)**2/2)
         
-        k1 = f(u)
-        k2 = f(u + dt*k1/2)
-        k3 = f(u + dt*k2/2)
-        k4 = f(u + dt*k3)
-        return u + dt*(k1 + 2*k2 + 2*k3 + k4)/6
+    #     k1 = f(u)
+    #     k2 = f(u + dt*k1/2)
+    #     k3 = f(u + dt*k2/2)
+    #     k4 = f(u + dt*k3)
+    #     return u + dt*(k1 + 2*k2 + 2*k3 + k4)/6
     
     
-    def addplot(u):
-        fig,ax = plt.subplots()
-        p=ax.pcolormesh(u)
-        fig.colorbar(p)
-        return fig
+    # def addplot(u):
+    #     fig,ax = plt.subplots()
+    #     p=ax.pcolormesh(u)
+    #     fig.colorbar(p)
+    #     return fig
 
-    for i in range(200001):
+    # for i in range(200001):
         
-        u = rk4(u)
+    #     u = rk4(u)
         
-        if i%500==0:
-            resultu.append(u.detach())
-            print(i)
+    #     if i%500==0:
+    #         resultu.append(u.detach())
+    #         print(i)
 
-        t+=dt
+    #     t+=dt
         
 
-    resultu = torch.stack(resultu,dim=1)
-    from torch.utils.tensorboard import SummaryWriter
-    writer = SummaryWriter('/home/lxy/store/projects/dynamic/PDE_structure/1D/KS/solver/11')
-    for i in range(256):
-        writer.add_figure('velocity',addplot(resultu[i].cpu().squeeze()),i)
-    writer.close()
-    torch.save(resultu,'KS_1D.pth')
+    # resultu = torch.stack(resultu,dim=1)
+    # from torch.utils.tensorboard import SummaryWriter
+    # writer = SummaryWriter('/home/lxy/store/projects/dynamic/PDE_structure/1D/KS/solver/11')
+    # for i in range(256):
+    #     writer.add_figure('velocity',addplot(resultu[i].cpu().squeeze()),i)
+    # writer.close()
+    # torch.save(resultu,'KS_1D.pth')
     # plt.pcolormesh(resultu[0,:,0].cpu())
     # plt.show()
     # endregion ####################

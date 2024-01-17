@@ -6,3 +6,6 @@
 
 *.pth
 *.pt
+
+*.npz
+*.npy

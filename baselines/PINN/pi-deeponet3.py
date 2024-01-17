@@ -164,7 +164,7 @@ def main():
         loss_ic = icloss(model, *ic)
         loss_bc = bcloss(model, *bc)
         loss_res = resloss(model, *res, )#pmean, pstd
-        loss = 20*loss_data + 20*loss_ic + loss_bc + loss_res
+        loss = loss_data + 20*loss_ic + loss_bc + loss_res
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -181,7 +181,7 @@ def main():
             #     (loss_fn(ut, ulabel)/
             #     loss_fn(ulabel,torch.zeros_like(ulabel))).item(), i)
             print(f'{i}, {loss.item():6g}, Data:{loss_data.item():6g}, IC:{loss_ic.item():6g}, BC:{loss_bc.item():6g}, EQ:{loss_res.item():6g}')
-            torch.save(model.state_dict(), f'/home/xinyang/storage/projects/PDE_structure/rebuttal/pi_deeponet/model-{i}.pt')
+            torch.save(model.state_dict(), f'/home/xinyang/storage/projects/PDE_structure/rebuttal/pi_deeponet3/model-{i}.pt')
             
 if __name__ == '__main__':
     main()

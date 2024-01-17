@@ -109,51 +109,62 @@ class pinnsf(nn.Module):
 
 
 
-class deeponet(nn.Module):
-    def __init__(self, layers) -> None:
-        super().__init__()
-        self.encoder = nn.Sequential(
+# class deeponet(nn.Module):
+#     def __init__(self, layers) -> None:
+#         super().__init__()
+#         self.encoder = nn.Sequential(
 
-            nn.Conv2d(3, 6, 8, stride=3),#84
-            nn.ReLU(),
+#             nn.Conv2d(3, 6, 8, stride=3),#84
+#             nn.ReLU(),
             
-            nn.Conv2d(6, 12, 6,stride=3), #27
-            nn.ReLU(),
+#             nn.Conv2d(6, 12, 6,stride=3), #27
+#             nn.ReLU(),
             
-            nn.Conv2d(12, 24, 6,stride=3),#8
-            nn.ReLU(),
+#             nn.Conv2d(12, 24, 6,stride=3),#8
+#             nn.ReLU(),
 
-            nn.Conv2d(24, 48, 8),#
-        )
-        self.cw = nn.Parameter(torch.randn(1,1,1,257)) 
-        self.rw = nn.Parameter(torch.randn(1,1,257,1))
+#             nn.Conv2d(24, 48, 8),#
+#         )
+#         self.cw = nn.Parameter(torch.randn(1,1,1,257)) 
+#         self.rw = nn.Parameter(torch.randn(1,1,257,1))
 
 
-        # self.branch_net = nn.Sequential(
-        #     nn.Linear(48, layers[1]),
-        #     nn.Tanh(),
-        #     nn.Linear(layers[1], layers[2]),
-        #     nn.Tanh(),
-        #     nn.Linear(layers[2], layers[-1]),
-        #     )
+#         # self.branch_net = nn.Sequential(
+#         #     nn.Linear(48, layers[1]),
+#         #     nn.Tanh(),
+#         #     nn.Linear(layers[1], layers[2]),
+#         #     nn.Tanh(),
+#         #     nn.Linear(layers[2], layers[-1]),
+#         #     )
         
 
-        # trunk_net = []
-        # for i in range(len(layers)-1):
-        #     trunk_net.append(nn.Linear(layers[i], layers[i+1]))
-        #     trunk_net.append(nn.Tanh())
-        # trunk_net.append(nn.Linear(layers[-1], layers[-1]))
-        # self.trunk_net = nn.Sequential(*trunk_net)
+#         # trunk_net = []
+#         # for i in range(len(layers)-1):
+#         #     trunk_net.append(nn.Linear(layers[i], layers[i+1]))
+#         #     trunk_net.append(nn.Tanh())
+#         # trunk_net.append(nn.Linear(layers[-1], layers[-1]))
+#         # self.trunk_net = nn.Sequential(*trunk_net)
 
-        self.branch_net = sifanMLP([48,layers[0]]+[layers[0]]*(len(layers)//2), act='ReLU')
-        self.trunk_net = sifanMLP([3]+layers, act='ReLU')
+#         self.branch_net = sifanMLP([48,layers[0]]+[layers[0]]*(len(layers)//2), act='ReLU')
+#         self.trunk_net = sifanMLP([3]+layers, act='ReLU')
 
-    def forward(self, x, y, t, u0, mu):
-        tmp = self.encoder(torch.cat((u0,mu*self.rw@self.cw),dim=1)).squeeze()
-        branch = self.branch_net(tmp)
-        trunk = self.trunk_net(torch.cat((x, y, t),dim=1))
-        out = branch*trunk
-        return torch.cat(
-            (out[:,:50].sum(dim=-1,keepdim=True),
-             out[:,50:].sum(dim=-1,keepdim=True)
-            ),dim=1)
+#     def forward(self, x, y, t, u0, mu):
+#         tmp = self.encoder(torch.cat((u0,mu*self.rw@self.cw),dim=1)).squeeze()
+#         branch = self.branch_net(tmp)
+#         trunk = self.trunk_net(torch.cat((x, y, t),dim=1))
+#         out = branch*trunk
+#         return torch.cat(
+#             (out[:,:50].sum(dim=-1,keepdim=True),
+#              out[:,50:].sum(dim=-1,keepdim=True)
+#             ),dim=1)
+    
+# class deeponetEval(deeponet):
+#      def forward(self, x, y, t, u0, mu):
+#         tmp = self.encoder(torch.cat((u0,mu*self.rw@self.cw),dim=1)).squeeze()
+#         branch = self.branch_net(tmp)
+#         trunk = self.trunk_net(torch.cat((x, y, t),dim=1))
+#         out = branch[:,None,:]*trunk[None]
+#         return torch.cat(
+#             (out[...,:50].sum(dim=-1,keepdim=True),
+#              out[...,50:].sum(dim=-1,keepdim=True)
+#             ),dim=-1)

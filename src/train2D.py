@@ -24,12 +24,13 @@ if __name__=='__main__':
     
     timesteps = params.timesteps
     
-
+    # every = 1
+    dataonly = 0
     mu = torch.linspace(params.paralow,params.parahigh,params.num_para,device=device).reshape(-1,1)
     mu = mu.repeat(params.repeat,1).reshape(-1,1,1,1)
 
     # mu for pdedu in dataset
-    mus = mu.unsqueeze(1).repeat(1,timesteps,1,1,1)
+    mus = mu.unsqueeze(1)[:].repeat(1,timesteps,1,1,1)#dataonly
     mus = mus.reshape(-1,1,1,1,)
 
     mutest = mu[0:params.num_para]
@@ -82,8 +83,8 @@ if __name__=='__main__':
     BATCH_SIZE = int(params.batchsize)
 
 
-    fdata:torch.Tensor = torch.load(params.datafile,map_location='cpu',)\
-        [:,params.datatimestart:params.datatimestart+params.timesteps+1].detach().to(torch.float)
+    fdata:torch.Tensor = torch.load(params.datafile,map_location='cpu',)['u']\
+        [:,params.datatimestart:params.datatimestart+params.timesteps+1].detach().to(torch.float)[:]#dataonly
     init = fdata[testIDs,0]
     label = fdata[testIDs,1:,].detach().cpu()
     data_u0 = fdata[:,:-1].reshape(-1,2,feature_size,feature_size)#.contiguous()
@@ -125,7 +126,7 @@ if __name__=='__main__':
                 self.pdemean = pdeu.mean(dim=(0,2,3),keepdim=True)
                 self.pdestd = pdeu.std(dim=(0,2,3),keepdim=True)
                 self.pdeu_normd = (pdeu[:,:,:-1,:-1] - self.pdemean)/self.pdestd
-                du = (data_du - pdeu)[:,:,:-1,:-1]
+                du = (data_du - pdeu)[:,:,:-1,:-1]#
 
                 del pdeu
                 collect()
@@ -185,7 +186,7 @@ if __name__=='__main__':
 
     print('Model parameters: {}\n'.format(model_count(model)))
     optimizer = torch.optim.Adam(model.parameters(), lr=params.lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=50, cooldown=250, verbose=True, min_lr=1e-5)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=50, cooldown=250, verbose=True, min_lr=5e-6)
     criterier = nn.MSELoss()
 
     test_error_best = 0.1
@@ -260,7 +261,7 @@ if __name__=='__main__':
             test_error = criterier(test_re[:,-1],label[:,-1])/criterier(label[:,-1],torch.zeros_like(label[:,-1]))
             
             writer.add_scalar('rel_error', test_error, i)
-            if test_error < test_error_best:
-                test_error_best = test_error
-                torch.save(model.state_dict(), params.modelsavepath)
+            # if test_error < test_error_best:
+            #     test_error_best = test_error
+            torch.save(model.state_dict(), params.modelsavepath)
     writer.close()
