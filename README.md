@@ -2,20 +2,19 @@
 ## PDE Preserved Neural Network
 
 Published on Communications Physics: [Multi-resolution partial differential equations preserved learning framework for spatiotemporal dynamics](https://www.nature.com/articles/s42005-024-01521-z) | [arxiv version](https://arxiv.org/pdf/2205.03990.pdf)
-
-<p align="center"><img src="docs/demo/PDE_preserved_schematic.png" alt="structure" align="center" width="600px"></p>
-
 <details>
 <summary>Abstract</summary>
 
 Traditional data-driven deep learning models often struggle with high training costs, error accumulation, and poor generalizability in complex physical processes. Physics-informed deep learning (PiDL) addresses these challenges by incorporating physical principles into the model. Most PiDL approaches regularize training by embedding governing equations into the loss function, yet this depends heavily on extensive hyperparameter tuning to weigh each loss term. To this end, we propose to leverage physics prior knowledge by “baking” the discretized governing equations into the neural network architecture via the connection between the partial differential
 equations (PDE) operators and network structures, resulting in a PDE-preserved neural network (PPNN). This method, embedding discretized PDEs through convolutional residual networks in a multi-resolution setting, largely improves the generalizability and long-term prediction accuracy, outperforming conventional black-box models. The effectiveness and merit of the proposed methods have been demonstrated across various spatiotemporal dynamical systems governed by spatiotemporal PDEs, including reaction-diffusion, Burgers’, and Navier-Stokes equations.
+</details>
+
+<p align="center"><img src="docs/demo/PDE_preserved_schematic.png" alt="structure" align="center" width="600px"></p>
 
 * results
     * Navier-Stokes equation 
 <p align="center"><img src="docs/demo/ns.gif" alt="structure" align="center" width="600px"></p>
 
-</details>
 
 
 ## Code
