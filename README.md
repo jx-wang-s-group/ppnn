@@ -28,10 +28,10 @@ equations (PDE) operators and network structures, resulting in a PDE-preserved n
    deepxde # required by DeepONet only
    ```
 * usage
-```bash
-python src/train2D.py cases/CASE_NAME.yaml
-```
-
+   ```bash
+   python src/train2D.py cases/CASE_NAME.yaml
+   ```
+##
 * `src`: PPNN source codes
     * `opertors.py`: numerical operators, is used to generate dataset. Also works as the PDE-preserving part of PPNN
     * `rhs.py`: define various right hand side of PDEs
