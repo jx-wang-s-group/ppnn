@@ -27,7 +27,10 @@ equations (PDE) operators and network structures, resulting in a PDE-preserved n
 
    deepxde # required by DeepONet only
    ```
-* usage
+* **generate data**
+  
+   use code in `src/operators.py`
+* training
    ```bash
    python src/train2D.py cases/CASE_NAME.yaml
    ```
