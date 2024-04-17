@@ -46,7 +46,9 @@ equations (PDE) operators and network structures, resulting in a PDE-preserved n
 * `Bv`: contains source code for parameterizing different boundary conditions, as disscussed in the first section in the supplementary informantion.
 
 * `baselines`: source code for the baseline methods including FNO, PINN and DeepONet
-
+* 
+## Problems
+If you find any bugs in the code or have trouble in running PPNN, you are very welcome to [create an issue](https://github.com/jx-wang-s-group/ppnn/issues) in this repository.
 
 ## Citation
 If you find our work relevant to your research, please cite:
