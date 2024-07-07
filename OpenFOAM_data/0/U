@@ -1,0 +1,50 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  8
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    location    "0";
+    object      u;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions	[0 1 -1 0 0 0 0];
+
+internalField   uniform (0 0 0); 
+
+
+boundaryField
+{
+    walls
+    {
+        type            noSlip;
+    }
+    
+    inlet
+    {
+        type            groovyBC;
+	//valueExpression "vector(0.5+0.5*sin(pi*pos().y + 2*pi/10*time()*pos().y/pos().y),0,0)";
+	valueExpression "vector(exp(-50*(pos().y-0.5)*(pos().y-0.5)),sin(time())*pos().y/pos().y*exp(-50*(pos().y-0.5)*(pos().y-0.5)),0)";
+	//value	uniform (1 0 0);
+    }
+    
+    outlet
+    {
+        type            zeroGradient;
+    }
+    
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+
+// ************************************************************************* //
