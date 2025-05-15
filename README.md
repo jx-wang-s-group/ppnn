@@ -29,9 +29,9 @@ equations (PDE) operators and network structures, resulting in a PDE-preserved n
    ```
 * **data generation**
   
-   use code in `src/operators.py`.
+   To generate training and testing set please refer to the code in `src/operators.py`.
   
-   The data used to generate the figures shown in the paper can be downloaded at [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15397548.svg)](https://doi.org/10.5281/zenodo.15397548)
+   The reference data used in the figures shown in the paper can be downloaded at [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15397548.svg)](https://doi.org/10.5281/zenodo.15397548)
 * training
    ```bash
    python src/train2D.py cases/CASE_NAME.yaml
